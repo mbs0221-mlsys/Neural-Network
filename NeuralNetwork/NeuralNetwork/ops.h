@@ -20,8 +20,8 @@ namespace ops {
 
 	template<class T>
 	Matrix<T> softmax(Matrix<T> &m) {
-		Matrix<T> m_sum = m.exp().reduce_sum(1);
-		return m / m_sum;
+		Matrix<T> m_sum = m.exp();
+		return m_sum / m_sum.reduce_sum(1);
 	}
 
 	template<class T>
@@ -47,12 +47,18 @@ namespace ops {
 		return grad;
 	}
 
+	// loss function
 	template<class T>
 	Matrix<T> mse(Matrix<T> &y_, Matrix<T> &y) {
 		Matrix<T> mse = (0.5 * (y_ - y)*(y_ - y)).reduce_mean(0).reduce_mean(1);
 		return mse;
 	}
 
+	template<class T>
+	Matrix<T> cross_entropy_loss(Matrix<T> &y_, Matrix<T> &y) {
+		Matrix<T> error = ((T)0.0f-(y*y_.log() + ((T)1.0f - y)*((T)1.0f - y_).log()));
+		return error.reduce_mean(0).reduce_mean(1);
+	}
 }
 
 #endif // !_OPS_

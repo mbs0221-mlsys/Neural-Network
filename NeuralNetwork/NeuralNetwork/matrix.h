@@ -29,6 +29,9 @@ template<class T>
 inline T __exp_(T x) { return exp(x); }
 
 template<class T>
+inline T __log_(T x) { return log(x); }
+
+template<class T>
 inline T __sigmoid_(T x) { return 1 / (1 + exp(x)); }
 
 template<class T>
@@ -202,10 +205,8 @@ public:
 		__reallocate_(m_row, m_col);
 	}
 	Matrix(const Matrix<T> &m) {
-		// re-allocate
 		name = m.name;
 		__reallocate_(m.row, m.col);
-		// load data
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
 				data[i][j] = m.data[i][j];
@@ -214,7 +215,6 @@ public:
 	}
 	Matrix(Shape &shape) {
 		name = "temp";
-		row = col = 0;
 		__reallocate_(shape[0], shape[1]);
 	}
 	
@@ -281,6 +281,7 @@ public:
 	// element-wise-ops
 	Matrix<T> sigmoid() { return element_wise_ops([=](T x) { return __sigmoid_(x); }); }
 	Matrix<T> exp() { return element_wise_ops([=](T x) { return __exp_(x); }); }
+	Matrix<T> log() { return element_wise_ops([=](T x) { return __log_(x); }); }
 	Matrix<T> pow(int k) { return element_wise_ops([=](T x) { return __pow_(x, k); }); }
 	Matrix<T> relu() { return element_wise_ops([=](T x) { return __relu_(x); }); }
 	Matrix<T> relu(double max_value, double threshold = 0.0f, double negative_slop=0.1f) {

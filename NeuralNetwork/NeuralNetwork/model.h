@@ -38,15 +38,14 @@ namespace model {
 			grad = ops::sub(y, output->value);
 			output->backward(grad);
 		}
-	};
-	
+	};	
 
 	template<class T>
 	class Network {
 	private:
 		int epochs = 1000;
-		int batch_size = 10;
-		double learning_rate = 0.01;
+		int batch_size = 20;
+		double learning_rate = 0.001;
 	public:
 		std::map<std::string, Matrix<T>> weights;
 		Network() {
@@ -100,6 +99,7 @@ namespace model {
 					
 					values["T2"] = values["O2"].matmul(weights["w2"]).add(weights["b2"]);
 					values["O3"] = values["T2"].sigmoid();
+					values["O4"] = ops::softmax(values["O3"]);
 
 					// ·´Ïò´«²¥
 					values["D2"] = ops::grad_sigmoid(values["O3"]) * (values["O3"] - values["Y0"]);
@@ -114,11 +114,11 @@ namespace model {
 					gradients["b1"] = values["D1"].reduce_sum(0);
 					gradients["b0"] = values["D0"].reduce_sum(0);
 
-					optimize(gradients, -learning_rate);
+					optimize(gradients, learning_rate);
 				}
 
 				values["y_pred"] = predict(x_train);
-				values["loss"] = ops::mse(values["y_pred"], y_train);
+				values["loss"] = ops::cross_entropy_loss(values["y_pred"], y_train);
 				printf("epochs:%5d\t loss:%.8f\n", i, values["loss"].data[0][0]);
 				last = values["loss"].data[0][0];
 			}
@@ -142,6 +142,7 @@ namespace model {
 			net = x_test.matmul(weights["w0"]).relu().add(weights["b0"]);
 			net = net.matmul(weights["w1"]).relu().add(weights["b1"]);
 			net = net.matmul(weights["w2"]).sigmoid().add(weights["b2"]);
+			net = ops::softmax(net);
 			return net;
 		}
 	};
@@ -191,18 +192,13 @@ namespace model {
 		y_train.loadmat("y_train.txt");
 		x_test.loadmat("x_test.txt");
 
-		//x_train.savemat("x_train.txt");
-		//y_train.savemat("y_train.txt");
-		//x_test.savemat("x_test.txt");
-
 		Network<T> net;
 		net.load_weights("Text.txt");
 		net.fit(x_train, y_train.one_hot());
 		net.save_weights("Text.txt");
 
 		Matrix<T> y_test = net.predict(x_test);
-		Matrix<T> out = ops::softmax(y_test);
-		out.savemat("softmax.txt");
+		y_test.savemat("softmax.txt");
 	}
 }
 
