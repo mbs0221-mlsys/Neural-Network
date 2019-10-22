@@ -130,6 +130,7 @@
     <Text Include="x_test.txt" />
     <Text Include="x_train.txt" />
     <Text Include="y_pred.txt" />
+    <Text Include="y_train-one_hot.txt" />
     <Text Include="y_train.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

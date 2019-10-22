@@ -46,7 +46,7 @@ namespace model {
 	private:
 		int epochs = 1000;
 		int batch_size = 10;
-		double learning_rate = 0.001;
+		double learning_rate = 0.01;
 	public:
 		std::map<std::string, Matrix<T>> weights;
 		Network() {
@@ -59,28 +59,31 @@ namespace model {
 			weights["b2"] = Matrix<T>(1, 10);
 			randomize();
 		}
-		void load_weights(char *path) {
-			FILE file;
-			FILE *fp = &file;
-			fopen_s(&fp, path, "r");
-			std::map<std::string, Matrix<T>>::iterator iter;
-			for (iter = weights.begin(); iter != weights.end(); iter++) {
-				iter->second.load(fp);
+		void load_weights(string path) {
+			ifstream inf;
+			inf.open(path, ios::in);
+			if (inf.is_open()) {
+				std::map<std::string, Matrix<T>>::iterator iter;
+				for (iter = weights.begin(); iter != weights.end(); iter++) {
+					iter->second.load(inf);
+				}
+				inf.close();
 			}
-			fclose(fp);
 		}
-		void save_weights(char *path) {
-			FILE file;
-			FILE *fp = &file;
-			fopen_s(&fp, path, "w");
-			std::map<std::string, Matrix<T>>::iterator iter;
-			for (iter = weights.begin(); iter != weights.end(); iter++) {
-				iter->second.save(fp);
+		void save_weights(string path) {			
+			ofstream outf;
+			outf.open(path, ios::out);
+			if (outf.is_open()) {
+				std::map<std::string, Matrix<T>>::iterator iter;
+				for (iter = weights.begin(); iter != weights.end(); iter++) {
+					iter->second.save(outf);
+				}
+				outf.close();
 			}
-			fclose(fp);
 		}
 		void fit(Matrix<T> &x_train, Matrix<T> &y_train) {
 			printf_s("fit()\n");
+			y_train.savemat("y_train-one_hot.txt");
 			double last = INFINITE;
 			std::map<std::string, Matrix<T>> values, gradients;
 			for (int i = 0; i < epochs; i++) {
@@ -111,24 +114,14 @@ namespace model {
 					gradients["b1"] = values["D1"].reduce_sum(0);
 					gradients["b0"] = values["D0"].reduce_sum(0);
 
-					optimize(gradients, 0.01);
+					optimize(gradients, learning_rate);
 				}
 
 				values["y_pred"] = predict(x_train);
 				values["loss"] = ops::mse(values["y_pred"], y_train);
-
 				printf("epochs:%5d\t loss:%.8f\n", i, values["loss"].data[0][0]);
-
-				if (values["loss"].data[0][0] > last) {
-					//printf("break;\n");
-					//break;
-				}
-
 				last = values["loss"].data[0][0];
-				values["y_pred"].savemat("y_pred.txt");
 			}
-			
-			getchar();
 		}
 		void randomize() {
 			std::map<std::string, Matrix<T>>::iterator iter;
@@ -137,7 +130,7 @@ namespace model {
 				weights[name].randomize();
 			}
 		}
-		void optimize(std::map<std::string, Matrix<T>> &gradients, double lr) {
+		void optimize(std::map<std::string, Matrix<T>> &gradients, double learning_rate) {
 			std::map<std::string, Matrix<T>>::iterator iter;
 			for (iter = weights.begin(); iter != weights.end(); iter++) {
 				std::string name = iter->first;
@@ -203,21 +196,13 @@ namespace model {
 		//x_test.savemat("x_test.txt");
 
 		Network<T> net;
-		//net.load_weights("Text.txt");
+		net.load_weights("Text.txt");
 		net.fit(x_train, y_train.one_hot());
 		net.save_weights("Text.txt");
 
-		Matrix<double> y_test = net.predict(x_test);
-		y_test.print();
-		getchar();
-		//initgraph(640, 540);
-		//print(x_train, y_train, 6);
-		//print(x_test, y_test, 4);
-		//setlinecolor(WHITE);
-		//line(400, 30, 400, 230);
-		//line(400, 30, 600, 30);
-		//getchar();
-		//closegraph();
+		Matrix<T> y_test = net.predict(x_test);
+		Matrix<T> out = ops::softmax(y_test);
+		out.savemat("softmax.txt");
 	}
 }
 

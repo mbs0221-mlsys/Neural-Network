@@ -70,5 +70,8 @@
     <Text Include="y_train.txt">
       <Filter>资源文件</Filter>
     </Text>
+    <Text Include="y_train-one_hot.txt">
+      <Filter>资源文件</Filter>
+    </Text>
   </ItemGroup>
 </Project>

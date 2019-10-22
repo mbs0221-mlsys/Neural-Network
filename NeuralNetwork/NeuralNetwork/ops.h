@@ -49,7 +49,7 @@ namespace ops {
 
 	template<class T>
 	Matrix<T> mse(Matrix<T> &y_, Matrix<T> &y) {
-		Matrix<T> mse = (0.5 * (y_ - y).pow(2)).reduce_mean(0).reduce_mean(1);
+		Matrix<T> mse = (0.5 * (y_ - y)*(y_ - y)).reduce_mean(0).reduce_mean(1);
 		return mse;
 	}
 

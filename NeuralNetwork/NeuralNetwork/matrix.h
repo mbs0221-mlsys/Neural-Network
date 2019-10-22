@@ -10,7 +10,8 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-
+#include <iostream>
+#include <fstream>
 #include <easyx.h>
 #include <graphics.h>
 
@@ -58,6 +59,8 @@ inline T __relu_grad_(T x, double max_value, double threshold, double negative_s
 		return negative_slop;
 	}
 }
+
+using namespace std;
 
 // Matrix class definition
 template<class T>
@@ -142,23 +145,25 @@ private:
 
 	// __allocate_
 	void __free_() {
-		if (data == nullptr)
-			return;
-		for (int i = 0; i < row; i++) {
-			if (data[i] == nullptr)
-				continue;
-			delete data[i];
+		if (row > 0 && col > 0) {
+			if (data == nullptr)
+				return;
+			for (int i = 0; i < row; i++) {
+				if (data[i] == nullptr)
+					continue;
+				delete data[i];
+			}
+			delete[] data;
 		}
-		delete[] data;
 	}
 	void __reallocate_(int m_row, int m_col) {
-		if (row != m_row || col != m_col) {			
-			row = m_row, col = m_col;
-			data = new T*[row];
-			for (int i = 0; i < row; i++) {
-				data[i] = new T[col];
+		if (row != m_row || col != m_col) {		
+			data = new T*[m_row];
+			for (int i = 0; i < m_row; i++) {
+				data[i] = new T[m_col];
 			}
 		}
+		row = m_row, col = m_col;
 	}
 
 protected:
@@ -182,30 +187,26 @@ protected:
 	}
 
 public:
-	char name[8];
+	string name;
 	int row;
 	int col;
 	T **data;
 
 	// constructor
 	Matrix() {
-		strcpy_s(name, "temp");
+		name = "temp";
 		row = col = 0;
-		data = nullptr;
+		__reallocate_(2, 2);
 	}
-	Matrix(int row, int col) {
-		strcpy_s(name, "temp");
-		this->row = row;
-		this->col = col;
-		data = new T*[row];
-		for (int i = 0; i < row; i++) {
-			data[i] = new T[col];
-		}
+	Matrix(int m_row, int m_col) {
+		name = "temp";
+		row = col = 0;
+		__reallocate_(m_row, m_col);
 	}
 	Matrix(const Matrix<T> &m) {
 		// re-allocate
+		name = m.name;
 		__reallocate_(m.row, m.col);
-		strcpy_s(name, m.name);
 		// load data
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
@@ -214,18 +215,14 @@ public:
 		}
 	}
 	Matrix(Shape &shape) {
-		strcpy_s(name, "temp");
-		row = shape[0];
-		col = shape[1];
-		data = new T*[row];
-		for (int i = 0; i < row; i++) {
-			data[i] = new T[col];
-		}
+		name = "temp";
+		row = col = 0;
+		__reallocate_(shape[0], shape[1]);
 	}
 	
 	// destructor
 	~Matrix() {
-		//__free_();
+		__free_();
 	}
 	
 	// operators
@@ -281,7 +278,7 @@ public:
 	Matrix<T> operator +(T b) {	return element_wise_ops([=](T x) { return x + b; }); }
 	Matrix<T> operator -(T b) {	return element_wise_ops([=](T x) { return x - b; }); }
 	Matrix<T> operator *(T b) {	return element_wise_ops([=](T x) { return x * b; }); }
-	Matrix<T> operator /(T b) {	return element_wise_ops([=](T x) { return x / b; });	}
+	Matrix<T> operator /(T b) {	return element_wise_ops([=](T x) { return x / b; }); }
 	
 	// element-wise-ops
 	Matrix<T> sigmoid() { return element_wise_ops([=](T x) { return __sigmoid_(x); }); }
@@ -327,7 +324,7 @@ public:
 	// assign operator
 	Matrix<T>& operator =(Matrix<T> &x) {
 		__reallocate_(x.row, x.col);
-		strcpy_s(name, x.name);
+		name = x.name;
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
 				data[i][j] = x.data[i][j];
@@ -383,40 +380,42 @@ public:
 	}
 
 	// serialize
-	void load(FILE *fp) {
+	void load(ifstream &in) {
 		int m_row, m_col;
-		fscanf_s(fp, "%d %d %s", &m_row, &m_col, &name);
+		in >> m_row >> m_col >> name;
 		// re-allocate
 		__reallocate_(m_row, m_col);
 		// load data
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
-				fscanf_s(fp, "%lf", &data[i][j]);
+				in >> data[i][j];
 			}
 		}
 	}
-	void save(FILE *fp) {
-		fprintf_s(fp, "%d %d %s\n", row, col, name);
+	void save(ofstream &out) {
+		out << row << col << name;
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
-				fprintf_s(fp, "%lf ", data[i][j]);
+				out << data[i][j];
 			}
-			fprintf_s(fp, "\n");
+			out << endl;
 		}
 	}
-	void loadmat(char *path) {
-		FILE file;
-		FILE *fp = &file;
-		fopen_s(&fp, path, "r");
-		load(fp);
-		fclose(fp);
+	void loadmat(string path) {
+		ifstream inf;
+		inf.open(path, ios::in);
+		if (inf.is_open()) {
+			load(inf);
+			inf.close();
+		}
 	}
-	void savemat(char *path) {
-		FILE file;
-		FILE *fp = &file;
-		fopen_s(&fp, path, "w");
-		save(fp);
-		fclose(fp);
+	void savemat(string path) {
+		ofstream outf;
+		outf.open(path, ios::out);
+		if (outf.is_open()) {
+			save(outf);
+			outf.close();
+		}
 	}
 	
 	// static method
