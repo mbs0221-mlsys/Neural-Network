@@ -3,15 +3,18 @@
 #ifndef _MATRIX_H_
 #define _MATRIX_H_
 
-#include <string>
-#include <vector>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <math.h>
+
+#include <string>
+#include <vector>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
+
 #include <easyx.h>
 #include <graphics.h>
 
@@ -145,28 +148,23 @@ private:
 
 	// __allocate_
 	void __free_() {
-		if (row > 0 && col > 0) {
-			if (data == nullptr)
-				return;
-			for (int i = 0; i < row; i++) {
-				if (data[i] == nullptr)
-					continue;
-				delete data[i];
-			}
-			delete[] data;
+		if (data == nullptr)
+			return;
+		for (int i = 0; i < row; i++) {
+			delete[] data[i];
 		}
+		delete[] data;
 	}
 	void __reallocate_(int m_row, int m_col) {
-		if (row != m_row || col != m_col) {		
-			data = new T*[m_row];
-			for (int i = 0; i < m_row; i++) {
-				data[i] = new T[m_col];
-			}
+		data = new T*[m_row];
+		for (int i = 0; i < m_row; i++) {
+			data[i] = new T[m_col];
 		}
 		row = m_row, col = m_col;
 	}
 
 protected:
+
 	//template<class K>
 	Matrix<T> element_wise_ops(Matrix<T> &m, T (*func)(T, T)) {
 		Matrix<T> out(row, col);
@@ -187,6 +185,7 @@ protected:
 	}
 
 public:
+	
 	string name;
 	int row;
 	int col;
@@ -196,11 +195,10 @@ public:
 	Matrix() {
 		name = "temp";
 		row = col = 0;
-		__reallocate_(2, 2);
+		data = nullptr;
 	}
 	Matrix(int m_row, int m_col) {
 		name = "temp";
-		row = col = 0;
 		__reallocate_(m_row, m_col);
 	}
 	Matrix(const Matrix<T> &m) {
@@ -393,10 +391,10 @@ public:
 		}
 	}
 	void save(ofstream &out) {
-		out << row << col << name;
+		out << row << " " << col << " " << name << endl;
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
-				out << data[i][j];
+				out << setiosflags(ios::fixed) << setprecision(10) <<  data[i][j] << " ";
 			}
 			out << endl;
 		}

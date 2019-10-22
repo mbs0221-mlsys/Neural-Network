@@ -114,7 +114,7 @@ namespace model {
 					gradients["b1"] = values["D1"].reduce_sum(0);
 					gradients["b0"] = values["D0"].reduce_sum(0);
 
-					optimize(gradients, learning_rate);
+					optimize(gradients, -learning_rate);
 				}
 
 				values["y_pred"] = predict(x_train);
