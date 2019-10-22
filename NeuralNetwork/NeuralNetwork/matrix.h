@@ -9,6 +9,7 @@
 #include <time.h>
 #include <math.h>
 
+#include <set>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -220,16 +221,17 @@ public:
 	
 	// destructor
 	~Matrix() {
+		name.clear();
 		__free_();
 	}
 	
 	// operators
-	Matrix<T> one_hot() {
-		int size[] = { row, 10 };
+	Matrix<T> one_hot(int num) {		
+		int size[] = { row, num };
 		Shape shape(size);
 		Matrix<T> m = Matrix<T>::zeros(shape);
 		for (int i = 0; i < m.row; i++) {
-			int k = (int) data[i][0];
+			int k = (int)(data[i][0] - 1);
 			m.data[i][k] = 1.0f;
 		}
 		return m;
@@ -387,7 +389,7 @@ public:
 		// load data
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
-				in >> data[i][j];
+				in >> setiosflags(ios::basefield) >> setprecision(18) >> data[i][j];
 			}
 		}
 	}
@@ -395,7 +397,7 @@ public:
 		out << row << " " << col << " " << name << endl;
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
-				out << setiosflags(ios::fixed) << setprecision(10) <<  data[i][j] << " ";
+				out << setiosflags(ios::basefield) << setprecision(18) << data[i][j] << " ";
 			}
 			out << endl;
 		}

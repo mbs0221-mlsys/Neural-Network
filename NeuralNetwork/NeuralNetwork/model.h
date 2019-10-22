@@ -43,19 +43,19 @@ namespace model {
 	template<class T>
 	class Network {
 	private:
-		int epochs = 1000;
-		int batch_size = 20;
-		double learning_rate = 0.001;
+		int epochs = 5000;
+		int batch_size = 60;
+		double learning_rate = 10000;
 	public:
 		std::map<std::string, Matrix<T>> weights;
 		Network() {
 			printf_s("Network()\n");
-			weights["w0"] = Matrix<T>(2, 5);
-			weights["w1"] = Matrix<T>(5, 8);
-			weights["w2"] = Matrix<T>(8, 10);
-			weights["b0"] = Matrix<T>(1, 5);
-			weights["b1"] = Matrix<T>(1, 8);
-			weights["b2"] = Matrix<T>(1, 10);
+			weights["w0"] = Matrix<T>(13, 11);
+			weights["w1"] = Matrix<T>(11, 7);
+			weights["w2"] = Matrix<T>(7, 3);
+			weights["b0"] = Matrix<T>(1, 11);
+			weights["b1"] = Matrix<T>(1, 7);
+			weights["b2"] = Matrix<T>(1, 3);
 			randomize();
 		}
 		void load_weights(string path) {
@@ -83,44 +83,49 @@ namespace model {
 		void fit(Matrix<T> &x_train, Matrix<T> &y_train) {
 			printf_s("fit()\n");
 			y_train.savemat("y_train-one_hot.txt");
+			Shape shape = y_train.shape();
+			int num_samples = shape[0];
 			double last = INFINITE;
-			std::map<std::string, Matrix<T>> values, gradients;
+			std::map<std::string, Matrix<T>> gradients;
 			for (int i = 0; i < epochs; i++) {
-				for (int start = 0; start < 100; start += batch_size) {
-					values["X0"] = x_train.slice(start, start + batch_size, 0);
-					values["Y0"] = y_train.slice(start, start + batch_size, 0);
+				for (int start = 0; start < num_samples; start += batch_size) {
+					int end = start + batch_size; 
+					end = min(end, num_samples);
+					Matrix<T> X0 = x_train.slice(start, end, 0);
+					Matrix<T> Y0 = y_train.slice(start, end, 0);
 
 					// 正向传播
-					values["T0"] = values["X0"].matmul(weights["w0"]).add(weights["b0"]);
-					values["O1"] = values["T0"].relu();
+					Matrix<T> T0 = X0.matmul(weights["w0"]).add(weights["b0"]);
+					Matrix<T> O1 = T0.sigmoid();
 
-					values["T1"] = values["O1"].matmul(weights["w1"]).add(weights["b1"]);
-					values["O2"] = values["T1"].relu();
+					Matrix<T> T1 = O1.matmul(weights["w1"]).add(weights["b1"]);
+					Matrix<T> O2 = T1.sigmoid();
 					
-					values["T2"] = values["O2"].matmul(weights["w2"]).add(weights["b2"]);
-					values["O3"] = values["T2"].sigmoid();
-					values["O4"] = ops::softmax(values["O3"]);
+					Matrix<T> T2 = O2.matmul(weights["w2"]).add(weights["b2"]);
+					Matrix<T> O3 = T2.sigmoid();
+					Matrix<T> O4 = ops::softmax(O3);
 
 					// 反向传播
-					values["D2"] = ops::grad_sigmoid(values["O3"]) * (values["O3"] - values["Y0"]);
-					values["D1"] = ops::matmul(ops::grad_relu(values["T1"]) * values["D2"], weights["w2"].Transpose());
-					values["D0"] = ops::matmul(ops::grad_relu(values["T0"]) * values["D1"], weights["w1"].Transpose());
+					Matrix<T> D2 = ops::grad_sigmoid(O3) * (O3 - Y0);
+					Matrix<T> D1 = ops::grad_sigmoid(O2) * D2.matmul(weights["w2"].Transpose());
+					Matrix<T> D0 = ops::grad_sigmoid(O1) * D1.matmul(weights["w1"].Transpose());
 
 					//gradients.clear();
-					gradients["w2"] = values["O2"].Transpose().matmul(values["D2"]);
-					gradients["w1"] = values["O1"].Transpose().matmul(values["D1"]);
-					gradients["w0"] = values["X0"].Transpose().matmul(values["D0"]);
-					gradients["b2"] = values["D2"].reduce_sum(0);
-					gradients["b1"] = values["D1"].reduce_sum(0);
-					gradients["b0"] = values["D0"].reduce_sum(0);
-
+					gradients["w2"] = O2.Transpose().matmul(D2);
+					gradients["w1"] = O1.Transpose().matmul(D1);
+					gradients["w0"] = X0.Transpose().matmul(D0);
+					gradients["b2"] = D2.reduce_sum(0);
+					gradients["b1"] = D1.reduce_sum(0);
+					gradients["b0"] = D0.reduce_sum(0);
+					
 					optimize(gradients, learning_rate);
+					gradients.clear();
 				}
 
-				values["y_pred"] = predict(x_train);
-				values["loss"] = ops::cross_entropy_loss(values["y_pred"], y_train);
-				printf("epochs:%5d\t loss:%.8f\n", i, values["loss"].data[0][0]);
-				last = values["loss"].data[0][0];
+				Matrix<T> y_pred = predict(x_train);
+				Matrix<T> loss = ops::cross_entropy_loss(y_pred, y_train);
+				printf("epochs:%5d\t loss:%.8f\n", i, loss.data[0][0]);
+				last = loss.data[0][0];
 			}
 		}
 		void randomize() {
@@ -139,8 +144,8 @@ namespace model {
 		}
 		Matrix<T> predict(Matrix<T> &x_test) {
 			Matrix<T> net;
-			net = x_test.matmul(weights["w0"]).relu().add(weights["b0"]);
-			net = net.matmul(weights["w1"]).relu().add(weights["b1"]);
+			net = x_test.matmul(weights["w0"]).sigmoid().add(weights["b0"]);
+			net = net.matmul(weights["w1"]).sigmoid().add(weights["b1"]);
 			net = net.matmul(weights["w2"]).sigmoid().add(weights["b2"]);
 			net = ops::softmax(net);
 			return net;
@@ -178,9 +183,9 @@ namespace model {
 	template<class T>
 	void test() {
 
-		Matrix<T> x_train(100, 2);
-		Matrix<T> y_train(100, 1);
-		Matrix<T> x_test(100, 2);
+		Matrix<T> x_train;
+		Matrix<T> y_train;
+		Matrix<T> x_test;
 
 		srand((unsigned int)time(NULL));
 
@@ -192,9 +197,13 @@ namespace model {
 		y_train.loadmat("y_train.txt");
 		x_test.loadmat("x_test.txt");
 
+		//x_train.savemat("x_train.txt");
+		//y_train.savemat("y_train.txt");
+		//x_test.savemat("x_test.txt");
+
 		Network<T> net;
 		net.load_weights("Text.txt");
-		net.fit(x_train, y_train.one_hot());
+		net.fit(x_train, y_train.one_hot(3));
 		net.save_weights("Text.txt");
 
 		Matrix<T> y_test = net.predict(x_test);
