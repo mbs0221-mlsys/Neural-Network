@@ -24,16 +24,15 @@ namespace model {
 		void __init_model_(vector<Layer<T>*> &layers) {
 			int num = layers.size();
 			for (int i = 1; i < num; i++) {
-				Layer<T> *layer0 = layers[i - 1];
-				Layer<T> *layer1 = layers[i];
-				layer1->setInput(layer0);
+				layers[i]->setInput(layers[i - 1]);
 			}
 		}
 	public:
-		Model(vector<Layer<T>*> &layers) : Layer<T>(layers[0]) {
+		Model(vector<Layer<T>*> &layers) : Layer<T>(NULL) {
 			int num = layers.size();
+			setInput(layers[0]);
 			setOutput(layers[num-1]);
-			__init_model_(layers);
+			__init_model_(layers); 
 		}
 		void compile(std::string &loss, Optimizer<T> &optimizer) {
 			this->loss_func = loss;
@@ -46,16 +45,12 @@ namespace model {
 				Matrix<T> y_ = forward();
 				
 				Matrix<T> delta = y_ - y;
-				Matrix<T> loss = ops::cross_entropy_loss(ops::softmax(output->value), y);
+				Matrix<T> loss = ops::cross_entropy_loss(ops::softmax(y_), y);
 				printf("Loss: %.8f\n", loss.data[0][0]);
 				
-				output->backward(delta);
+				Matrix<T> delta_b = backward(delta);
 
-				for (Layer<T> *p = output; p != NULL; p = p->input) {
-					if (p->require_grad) {
-						p->update();
-					}
-				}
+				update();
 			}
 			printf("training finished");
 		}
@@ -66,10 +61,16 @@ namespace model {
 			Layer<T>::feed(x);
 		}
 		virtual Matrix<T> forward() {
+			Matrix<T> x = Layer<T>::forward();
 			return output->forward();
 		}
-		virtual void backward(Matrix<T> &delta) {
-			output->backward(delta);
+		virtual Matrix<T> backward(Matrix<T> &delta) {
+			return input->backward(output->backward(delta));
+		}
+		virtual void update() {
+			for (Layer<T> *p = output; p != nullptr; p = p->input) {
+				p->update();
+			}
 		}
 	};
 
@@ -239,19 +240,21 @@ namespace model {
 			int size[] = { NULL, 13 };
 
 			vector<Layer<T>*> layers;
-			layers.push_back(new Input<T>(size));
+			layers.push_back(new Input<T>(size));// value
 			layers.push_back(new FullConnected<T>(11, "sigmoid"));
 			layers.push_back(new FullConnected<T>(9, "sigmoid"));
 			layers.push_back(new FullConnected<T>(7, "sigmoid"));
 			layers.push_back(new FullConnected<T>(5, "sigmoid"));
-			layers.push_back(new FullConnected<T>(3, "sigmoid"));
+			layers.push_back(new FullConnected<T>(3, "sigmoid"));// calculate
 
 			return new Model<T>(layers);
 		}
 
 		template<class T>
 		Model<T>* create_decoder() {
+			
 			int size[] = { NULL, 3 };
+			
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
 			layers.push_back(new FullConnected<T>(5, "sigmoid"));
@@ -259,6 +262,7 @@ namespace model {
 			layers.push_back(new FullConnected<T>(9, "sigmoid"));
 			layers.push_back(new FullConnected<T>(11, "sigmoid"));
 			layers.push_back(new FullConnected<T>(13, "sigmoid"));
+			
 			return new Model<T>(layers);
 		}
 
@@ -271,7 +275,7 @@ namespace model {
 			vector<Layer<T>*> layers;
 			layers.push_back(encoder);
 			layers.push_back(decoder);
-
+			
 			return new Model<T>(layers);
 		}
 
