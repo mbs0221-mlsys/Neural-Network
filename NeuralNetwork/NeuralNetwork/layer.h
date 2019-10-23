@@ -24,12 +24,16 @@ namespace layers {
 		Matrix<T> getValue() { return value; }
 		Shape getShape() { return shape; }
 		virtual void setInput(Layer<T> *input) {
+			this->input = input;
+		}
+		virtual void feed(Matrix<T> &x) {
 			if (input != nullptr) {
-				this->input = input;
+				input->feed(x);
 			}
 		}
-		virtual Matrix<T> forward() {
-			return input->forward();
+		virtual Matrix<T> forward() { 
+			if (input != nullptr)
+				return input->forward(); 
 		}
 		virtual void backward(Matrix<T> &delta) { ; }
 		virtual void update() { ; }
@@ -38,19 +42,24 @@ namespace layers {
 	template<class T>
 	class Input : public Layer<T> {
 	public:
-		Input(Shape &shape) : Layer<T>(NULL) {
+		Input(Shape &shape) : Layer<T>(nullptr) {
 			this->shape = shape;
 		}
-		Input(int size[]) : Layer<T>(NULL) {
+		Input(int size[]) : Layer<T>(nullptr) {
 			this->shape = Shape(size);
 		}
-
-		void feed(Matrix<T> &x) { value = x; }
-		virtual void setInput(Layer<T> *input) { 
-			Layer<T>::setInput(input); 
+		virtual void feed(Matrix<T> &x) { 
+			if (input == nullptr)
+				value = x; // 前面没有其他输入
+			else
+				Layer<T>::feed(x); // 前面有其他输入
 		}
-		virtual Matrix<T> forward() { return value; }
-		virtual void update() { ; }
+		virtual Matrix<T> forward() {
+			if (input != nullptr)
+				return Layer<T>::forward(); // 前面有其他输入
+			else			
+				return value; // 前面没有其他输
+		}
 	};
 
 	template<class T>
