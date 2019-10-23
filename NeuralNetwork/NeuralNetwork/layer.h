@@ -13,40 +13,62 @@ namespace layers {
 
 	template<class T>
 	class Layer {
-	private:
-		bool require_grad = true;
-	protected:
-		Shape shape;
-		string name;
 	public:
+		string name;
+		Shape shape;
+		bool require_grad = false;
 		Matrix<T> value;
 		Layer<T>* input;
-		Layer<T>* output;
-		Layer(Layer<T>* input): input(input) { if (input != nullptr) shape = input->shape; }
+		Layer() {  }
+		Layer(Layer<T> *input) { setInput(input); }
 		Matrix<T> getValue() { return value; }
 		Shape getShape() { return shape; }
-		virtual Matrix<T> forward() { if(input != nullptr) return input->forward(); }
-		virtual void backward(Matrix<T> &delta) {  }
+		virtual void setInput(Layer<T> *input) {
+			if (input != nullptr) {
+				this->input = input;
+			}
+		}
+		virtual Matrix<T> forward() {
+			return input->forward();
+		}
+		virtual void backward(Matrix<T> &delta) { ; }
+		virtual void update() { ; }
 	};
 
 	template<class T>
 	class Input : public Layer<T> {
 	public:
-		Input(const Shape &shape) : Layer<T>::Layer(NULL) { this->shape = shape; }
-		void feed(const Matrix<T> &x) { value = x; }
+		Input(Shape &shape) : Layer<T>(NULL) {
+			this->shape = shape;
+		}
+		Input(int size[]) : Layer<T>(NULL) {
+			this->shape = Shape(size);
+		}
+
+		void feed(Matrix<T> &x) { value = x; }
+		virtual void setInput(Layer<T> *input) { 
+			Layer<T>::setInput(input); 
+		}
 		virtual Matrix<T> forward() { return value; }
+		virtual void update() { ; }
 	};
 
 	template<class T>
 	class Linear : public Layer<T> {
+	private:
 		Matrix<T> w, b;
+		Matrix<T> grad_w, grad_b;
 	public:
-		Linear(Layer<T>* input, int n_output) : Layer<T>(input) {
+		Linear(int n_output) : Layer<T>(NULL) {
+			require_grad = true;
+			shape.setDims(n_output, 1);
+		}
+		virtual void setInput(Layer<T> *input) {
 			Shape input_shape = input->getShape();
-			int size[] = { input_shape[1], n_output };
-			w = Matrix<T>( input_shape[0], n_output);
-			b = Matrix<T>(1, n_output);
-			shape = Shape(size);
+			shape.setDims(input_shape[1], 0);
+			w = Matrix<T>(shape);
+			b = Matrix<T>(1, shape[0]);
+			Layer<T>::setInput(input);
 		}
 		virtual Matrix<T> forward() {
 			Matrix<T> x = Layer<T>::forward();
@@ -55,64 +77,49 @@ namespace layers {
 		}
 		virtual void backward(Matrix<T> &delta) {
 			Matrix<T> x = input->getValue();
-			auto grad_w = x.Transpose().matmul(delta);
-			auto grad_b = delta.reduce_sum(0);
+			grad_w = x.Transpose().matmul(delta);
+			grad_b = delta.reduce_sum(0);
 			input->backward(delta.matmul(w.Transpose()));
 		}
-	};
-
-	template<class T>
-	class Sigmoid : public Layer<T> {
-		Matrix<T> ones;
-	public:
-		Sigmoid(Layer<T>* input) : Layer<T>(input) {
-			shape = Shape(input->shape);
-			ones = Matrix<T>::ones(shape);
-		}
-		virtual Matrix<T> forward() {
-			Matrix<T> x = Layer<T>::forward();
-			value = x.sigmoid();
-			return value;
-		}
-		virtual void backward(Matrix<T> &delta) {
-			input->backward(delta * ops::grad_sigmoid(value));
+		virtual void update() {
+			Layer<T>::update();
+			w = w - 0.01*grad_w;
+			b = b - 0.01*grad_b;
 		}
 	};
 
 	template<class T>
-	class ReLU : public Layer<T> {
-	public:
-		ReLU(Layer<T>* input) : Layer<T>(input) {
-
-		}
-		virtual Matrix<T> forward() {
-			Matrix<T> x = Layer<T>::forward();
-			value = x.relu();
-			return value;
-		}
-		virtual void backward(Matrix<T> &delta) {
-			Matrix<T> x = input->getValue();
-			input->backward(delta * ops::grad_relu(x));
-		}
-	};
-
-	template<class T>
-	class LeakyReLU : public Layer<T> {
+	class FullConnected : public Linear<T> {
 	private:
-		double max_value;
-		double threshold;
-		double negative_slope;
+		Matrix<T> grad;
+		string activation;
 	public:
-		LeakyReLU(Layer<T> *input, double max_value, double threshold, double negative_slope)
-			: Layer<T>(input), max_value(max_value), threshold(threshold), negative_slope(negative_slope) {
-
+		FullConnected(int n_output, string activation) : Linear<T>(n_output), activation(activation) { ; }
+		virtual void setInput(Layer<T> *input) {
+			Linear<T>::setInput(input);
 		}
 		virtual Matrix<T> forward() {
-			Matrix<T> x = Layer<T>::forward();
-			o = ops::relu(x, max_value, threshold, negative_slope);
+			Matrix<T> x = Linear<T>::forward();
+			if (activation == "sigmoid") {
+				value = x.sigmoid();
+				grad = ops::grad_sigmoid(value);
+			}
+			if (activation == "relu") {
+				value = x.relu();
+				grad = ops::grad_relu(x);
+			}
+			//if (activation == "leaky_relu") {
+			//	value = x.relu(x, max_value, threshold, negative_slope);
+			//	grad = ops::grad_relu(x, max_value, threshold, negative_slop);
+			//}
+			return value;
+
 		}
 		virtual void backward(Matrix<T> &delta) {
-
+			Linear<T>::backward(delta * grad);
+		}
+		virtual void update() {
+			Linear<T>::update();
 		}
 	};
 

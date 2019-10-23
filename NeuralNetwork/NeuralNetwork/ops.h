@@ -41,7 +41,18 @@ namespace ops {
 		Matrix<T> grad(x.row, x.col);
 		for (int i = 0; i < x.row; i++) {
 			for (int j = 0; j < x.col; j++) {
-				grad.data[i][j] = x.data[i][j] > 0 ? 1.0 : 0;
+				grad.data[i][j] = __relu_grad_(x.data[i][j]);
+			}
+		}
+		return grad;
+	}
+
+	template<class T>
+	Matrix<T> grad_relu(Matrix<T> &x, double max_value, double threshold, double negative_slope) {
+		Matrix<T> grad(x.row, x.col);
+		for (int i = 0; i < x.row; i++) {
+			for (int j = 0; j < x.col; j++) {
+				grad.data[i][j] = __relu_grad_(x.data[i][j], max_value, threshold, negative_slope);
 			}
 		}
 		return grad;

@@ -10,9 +10,9 @@ namespace optimizer {
 	template<class T>
 	class Optimizer {
 	private:
-		double learning_rate = 0.001;
+		double learning_rate;
 	public:
-		Optimizer() { ; }
+		Optimizer(double lr = 0.001) :learning_rate(lr) { ; }
 		void optimize(layers::Layer<T> &loss) {
 			//for (int i = 1; i < 100; i++) {
 			//	loss.backward();

@@ -16,12 +16,20 @@ namespace model {
 	
 	template<class T>
 	class Model : public Layer<T> {
+		Layer<T> *output;
 		std::string loss_func;
 		std::vector<double> losses;
 		Optimizer<T> optimizer;
 	public:
-		Model(Layer<T>* input, Layer<T>* output) : Layer<T>(input) {
-			this->output = output;
+		Model(vector<Layer<T>*> &layers) : Layer<T>(NULL) {
+			int num = layers.size();
+			this->input = layers[0];
+			this->output = layers[num-1];
+			for (int i = 1; i < num; i++) {
+				Layer<T> *layer0 = layers[i - 1];
+				Layer<T> *layer1 = layers[i];
+				layer1->setInput(layer0);
+			}
 		}
 		void compile(std::string &loss, Optimizer<T> &optimizer) {
 			this->loss_func = loss;
@@ -29,14 +37,23 @@ namespace model {
 		}
 		void train(Matrix<T> x, Matrix<T> y) {
 			((Input<T> *)input)->feed(x);
-			//optimizer.optimize(loss);
+			for (int i = 0; i < 100; i++) {
 
-			output->forward();
-			Matrix<T> loss = ops::mse(output->value, y);
-			losses.push_back(loss.data[0][0]);
+				output->forward();
+				
+				Matrix<T> delta = output->value - y;
+				Matrix<T> loss = ops::cross_entropy_loss(ops::softmax(output->value), y);
+				printf("Loss: %.8f\n", loss.data[0][0]);
+				
+				output->backward(delta);
 
-			grad = ops::sub(y, output->value);
-			output->backward(grad);
+				for (Layer<T> *p = output; p != NULL; p = p->input) {
+					if (p->require_grad) {
+						p->update();
+					}
+				}
+			}
+			printf("training finished");
 		}
 	};	
 
@@ -144,9 +161,9 @@ namespace model {
 		}
 		Matrix<T> predict(Matrix<T> &x_test) {
 			Matrix<T> net;
-			net = x_test.matmul(weights["w0"]).sigmoid().add(weights["b0"]);
-			net = net.matmul(weights["w1"]).sigmoid().add(weights["b1"]);
-			net = net.matmul(weights["w2"]).sigmoid().add(weights["b2"]);
+			net = x_test.matmul(weights["w0"]).add(weights["b0"]).sigmoid();
+			net = net.matmul(weights["w1"]).add(weights["b1"]).sigmoid();
+			net = net.matmul(weights["w2"]).add(weights["b2"]).sigmoid();
 			net = ops::softmax(net);
 			return net;
 		}
@@ -154,30 +171,39 @@ namespace model {
 
 	template<class T>
 	void test_model() {
-		// Data
-		Matrix<T> x_train(10000, 2);
-		Matrix<T> y_train(10000, 1);
-		Matrix<T> x_test(40000, 2);
+		Matrix<T> x_train;
+		Matrix<T> y_train;
+		Matrix<T> x_test;
+
+		srand((unsigned int)time(NULL));
+
+		x_train.print_shape();
+		y_train.print_shape();
+		x_test.print_shape();
+
+		x_train.loadmat("x_train.txt");
+		y_train.loadmat("y_train.txt");
+		x_test.loadmat("x_test.txt");
+
+		//x_train.savemat("x_train.txt");
+		//y_train.savemat("y_train.txt");
+		//x_test.savemat("x_test.txt");
+
 		// Model
 		printf("Model:\n");
-		int size[] = { NULL, 10 };
-		Shape shape(size);
-		Input<T> input(shape);
-
-		Linear<T> linear1((Layer<T>*)&input, 6);
-		Sigmoid<T> layer1((Layer<T>*)&linear1);
-
-		Linear<T> linear2((Layer<T>*)&layer1, 9);
-		Sigmoid<T> layer2((Layer<T>*)&linear2);
-
-		Linear<T> linear3((Layer<T>*)&layer2, 15);
-		ReLU<T> output((Layer<T>*)&linear3);
-
-		Model<T> model((Layer<T>*)&input, (Layer<T>*)&output);
+		int size[] = { NULL, 13 };
+		vector<Layer<T>*> layers;
+		layers.push_back(new Input<T>(size));
+		layers.push_back(new FullConnected<T>(11, "sigmoid"));
+		layers.push_back(new FullConnected<T>(9, "sigmoid"));
+		layers.push_back(new FullConnected<T>(7, "sigmoid"));
+		layers.push_back(new FullConnected<T>(5, "sigmoid"));
+		layers.push_back(new FullConnected<T>(3, "sigmoid"));
+		Model<T> model(layers);
 		printf("Model.compile:\n");
 		model.compile(std::string("least_squares"), Optimizer<T>(0.9));
 		printf("Model.train:\n");
-		model.train(x_train, y_train);
+		model.train(x_train, y_train.one_hot(3));
 	}
 
 	template<class T>

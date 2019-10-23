@@ -20,6 +20,9 @@ public:
 		dims[2] = size[2];
 		dims[3] = size[3];
 	}
+	void setDims(int k, int axis) {
+		dims[axis] = k;
+	}
 	int operator[](int k) const { return dims[k]; }
 	inline int size() {
 		return (dims[0] * dims[1] * dims[2] * dims[3]);

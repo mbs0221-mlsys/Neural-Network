@@ -42,6 +42,9 @@ template<class T>
 inline T __relu_(T x) { return max(x, 0); }
 
 template<class T>
+inline T __relu_grad_(T x) { return ((x > 0) ? 1.0f : 0.0f); }
+
+template<class T>
 inline T __relu_(T x, double max_value, double threshold, double negative_slop) {
 	if (x >= max_value) {
 		return max_value;
