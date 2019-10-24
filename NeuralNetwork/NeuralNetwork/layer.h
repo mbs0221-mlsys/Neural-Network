@@ -44,6 +44,7 @@ namespace layers {
 	template<class T>
 	class Input : public Layer<T> {
 	public:
+		Input() : Layer<T>(nullptr) { ; }
 		Input(Shape &shape) : Layer<T>(nullptr) {
 			this->shape = shape;
 		}

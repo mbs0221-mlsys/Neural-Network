@@ -23,10 +23,9 @@ namespace model {
 		Layer<T>* output;
 		void __init_model_(vector<Layer<T>*> &layers) {
 			int num = layers.size();
-			layers[0]->setInput(nullptr);
 			// 双向链表
 			for (int i = 1; i < num; i++) {
-				layers[i]->setInput(layers[i - 1]);
+				layers[i]->setInput(layers[i - 1]);// 建立链接关系
 			}
 		}
 	public:
@@ -62,13 +61,12 @@ namespace model {
 			this->output = output;
 		}
 		virtual Matrix<T> forward(Matrix<T> &data) {
-			Matrix<T> in = Layer<T>::forward(data); // 先让input处理输入数据
-			return output->forward(in); // 再让本地网络处理输入数据
+			// 对于Model类，先执行父类forward方法，再执行output的forward方法；
+			return output->forward(Layer<T>::forward(data));
 		}
 		virtual Matrix<T> backward(Matrix<T> &delta) {
-			Matrix<T> delta_1 = output->backward(delta);// 先让output反向传播，在input得到最终的delta
-			Matrix<T> delta_0 = Layer<T>::backward(delta_1); // 再让input继续反向传播，得到最终的delta
-			return delta_0;
+			// 对于Model类，先执行output的backward方法，再执行父类的forward方法；
+			return Layer<T>::backward(output->backward(delta));
 		}
 		virtual void update() {
 			for (Layer<T> *p = output; p != nullptr; p = p->input) {
