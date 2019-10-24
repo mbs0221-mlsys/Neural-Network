@@ -17,12 +17,14 @@ namespace model {
 	template<class T>
 	class Model : public Layer<T> {
 	private:
-		Layer<T> *output;
 		std::string loss_func;
 		std::vector<double> losses;
 		Optimizer<T> optimizer;
+		Layer<T>* output;
 		void __init_model_(vector<Layer<T>*> &layers) {
 			int num = layers.size();
+			layers[0]->setInput(nullptr);
+			// 双向链表
 			for (int i = 1; i < num; i++) {
 				layers[i]->setInput(layers[i - 1]);
 			}
@@ -39,10 +41,9 @@ namespace model {
 			this->optimizer = optimizer;
 		}
 		void train(Matrix<T> &x, Matrix<T> &y) {
-			feed(x);
 			for (int i = 0; i < 100; i++) {
-
-				Matrix<T> y_ = forward();
+				
+				Matrix<T> y_ = forward(x);
 				
 				Matrix<T> delta = y_ - y;
 				Matrix<T> loss = ops::cross_entropy_loss(ops::softmax(y_), y);
@@ -54,18 +55,20 @@ namespace model {
 			}
 			printf("training finished");
 		}
+		virtual void setInput(Layer<T> *input) {
+			this->input = input;
+		}
 		virtual void setOutput(Layer<T> *output) {
 			this->output = output;
 		}
-		virtual void feed(Matrix<T> &x) {
-			Layer<T>::feed(x);
-		}
-		virtual Matrix<T> forward() {
-			Matrix<T> x = Layer<T>::forward();
-			return output->forward();
+		virtual Matrix<T> forward(Matrix<T> &data) {
+			Matrix<T> in = Layer<T>::forward(data); // 先让input处理输入数据
+			return output->forward(in); // 再让本地网络处理输入数据
 		}
 		virtual Matrix<T> backward(Matrix<T> &delta) {
-			return input->backward(output->backward(delta));
+			Matrix<T> delta_1 = output->backward(delta);// 先让output反向传播，在input得到最终的delta
+			Matrix<T> delta_0 = Layer<T>::backward(delta_1); // 再让input继续反向传播，得到最终的delta
+			return delta_0;
 		}
 		virtual void update() {
 			for (Layer<T> *p = output; p != nullptr; p = p->input) {
@@ -272,7 +275,9 @@ namespace model {
 			Model<T>* encoder = create_encoder<T>();
 			Model<T>* decoder = create_decoder<T>();
 
+			int size[] = { NULL, 13 };
 			vector<Layer<T>*> layers;
+			layers.push_back(new Input<T>(size));
 			layers.push_back(encoder);
 			layers.push_back(decoder);
 			
