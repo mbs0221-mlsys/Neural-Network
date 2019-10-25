@@ -146,8 +146,7 @@ namespace layers {
 			return value;
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			delta.reshape(before);// restore privious shape
-			return Layer<T>::backward(delta * grad);
+			return Layer<T>::backward(delta.reshape(before)); // restore privious shape
 		}
 	};
 
