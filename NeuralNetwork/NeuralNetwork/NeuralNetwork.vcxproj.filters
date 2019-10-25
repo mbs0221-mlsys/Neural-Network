@@ -33,6 +33,9 @@
     <ClInclude Include="tensor.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="image.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="layer.cpp">
@@ -67,5 +70,10 @@
     <Text Include="y_train-one_hot.txt">
       <Filter>资源文件</Filter>
     </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="timg.jpg">
+      <Filter>资源文件</Filter>
+    </Image>
   </ItemGroup>
 </Project>

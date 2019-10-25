@@ -7,6 +7,7 @@
 
 #include "layer.h"
 #include "optimizer.h"
+#include "image.h"
 
 namespace model {
 
@@ -14,6 +15,7 @@ namespace model {
 	using namespace tensor;
 	using namespace layers;
 	using namespace optimizer;
+	using namespace image;
 	
 	template<class T>
 	class Model : public Layer<T> {
@@ -203,7 +205,7 @@ namespace model {
 		template<class T>
 		Model<T>* create_fc_network() {
 
-			int size[] = { NULL, 13 };
+			int size[] = { NULL, NULL, NULL, 13 };
 
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
@@ -367,6 +369,8 @@ namespace model {
 
 	template<class T>
 	void test() {
+		// run test module
+		printf("model::test()\n");
 
 		srand((unsigned int)time(NULL));
 
@@ -376,16 +380,35 @@ namespace model {
 		load_data("y_train.txt", y_train);
 		load_data("x_test.txt", x_test);
 
-		//x_train.print();
+		//Mat im = imread("timg.jpg", 1);
+		//imshow("ͼƬ", im);
+		//Tensor<T> tensor = image::im2tensor<T>(im);
+		
+		x_train.print();
 		//y_train.print();
 		//x_test.print();
 
-		save_data("x_train.txt", x_train);
-		save_data("y_train.txt", x_train);
-		save_data("x_test.txt", x_test);
-
-		// run test module
-		printf("model::test()\n");
+		//save_data("x_train.txt", x_train);
+		//save_data("y_train.txt", x_train);
+		//save_data("x_test.txt", x_test);
+		{
+			Tensor<T> ones(1, 5, 5, 3);
+			ones.foreach_assign([&](int i, int j, int k, int l){
+				return 1;
+			});
+			Tensor<T> filter(1, 3, 3, 3);
+			filter.foreach_assign([&](int i, int j, int k, int l) {
+				return 1;
+			});
+			cout << "x_train.padding(1).print();" << endl;
+			ones = ones.padding(1);
+			ones.print();
+			cout << "ones.conv2d(filter, 2).print();" << endl;
+			ones = ones.conv2d(filter, 2);
+			ones.print();
+			getchar();
+		}
+		//tensor::test<T>();
 		//bp_network::test<T>(x_train, y_train, x_test);
 		//fc_network::test<T>(x_train, y_train, x_test);
 		//auto_encoder::test<T>(x_train, y_train, x_test);

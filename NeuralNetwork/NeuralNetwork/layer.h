@@ -76,8 +76,8 @@ namespace layers {
 			Layer<T>::setInput(input);
 			Shape input_shape = input->getShape();
 			// output_shape
-			w = Tensor<T>(1, 1, input_shape[2], shape[3]);// (1,1,row,col)
-			b = Tensor<T>(1, 1, input_shape[1], shape[1]);// (1,1,row,1)
+			w = Tensor<T>(1, 1, input_shape[3], shape[3]);// (1,1,row,col)
+			b = Tensor<T>(1, 1, 1, shape[3]);// (1,1,1,col)
 		}
 		virtual Tensor<T> forward(Tensor<T> data) {
 			Tensor<T> x = Layer<T>::forward(data);

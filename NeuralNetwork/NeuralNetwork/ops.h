@@ -29,7 +29,7 @@ namespace ops {
 
 	template<class T>
 	Tensor<T> dropout(Tensor<T> &x, double rate) {
-		Tensor<T> w = Tensor<T>::mask(x.shape(), 0.1, 1);
+		Tensor<T> w = Tensor<T>::mask(x.shape(), 0.1);
 		return w * x;
 	}
 

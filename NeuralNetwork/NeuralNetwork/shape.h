@@ -12,11 +12,11 @@ namespace shape {
 
 	class Shape {
 	private:
-		int dims[4] = { 1, 1, 1, 1 };
+		int dims[4] = { 0, 0, 0, 0 };
 
 	public:
 		Shape() { 	}
-		Shape(Shape & s) {
+		Shape(Shape &s) {
 			dims[0] = s.dims[0];
 			dims[1] = s.dims[1];
 			dims[2] = s.dims[2];
@@ -37,7 +37,7 @@ namespace shape {
 		inline int operator[](int k) const  {
 			return dims[k];
 		}
-		inline int size() {
+		int size() {
 			return (dims[0] * dims[1] * dims[2] * dims[3]);
 		}
 		inline int sub2ind(int i, int j, int k, int l) {
