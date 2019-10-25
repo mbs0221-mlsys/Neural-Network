@@ -42,7 +42,6 @@ namespace layers {
 		virtual void update() { ; }
 	};
 
-	// 输入层
 	template<class T>
 	class Input : public Layer<T> {
 	public:
@@ -62,7 +61,6 @@ namespace layers {
 		}
 	};
 
-	// 线性变换层
 	template<class T>
 	class Linear : public Layer<T> {
 	private:
@@ -97,7 +95,6 @@ namespace layers {
 		}
 	};
 
-	// 全连接层
 	template<class T>
 	class FullConnected : public Linear<T> {
 	private:
@@ -133,7 +130,27 @@ namespace layers {
 		}
 	};
 
-	// 损失层
+	template<class T>
+	class Flatten : public Layer<T> {
+	private;
+		Shape before;
+	public:
+		Flatten() : Layer<T>() { ; }
+		virtual void setInput(Layer<T> *input) {
+			Layer<T>::setInput(input);
+		}
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Tensor<T> x = Linear<T>::forward(data);
+			before = x.getShape();// privious shape
+			value = x.flatten();
+			return value;
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			delta.reshape(before);// restore privious shape
+			return Layer<T>::backward(delta * grad);
+		}
+	};
+
 	template<class T>
 	class Loss : Layer<T> {
 	private:
