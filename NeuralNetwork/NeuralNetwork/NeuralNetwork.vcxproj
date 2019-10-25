@@ -111,7 +111,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="layer.h" />
-    <ClInclude Include="matrix.h" />
     <ClInclude Include="model.h" />
     <ClInclude Include="ops.h" />
     <ClInclude Include="optimizer.h" />
@@ -121,7 +120,6 @@
   <ItemGroup>
     <ClCompile Include="layer.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="matrix.cpp" />
     <ClCompile Include="model.cpp" />
   </ItemGroup>
   <ItemGroup>

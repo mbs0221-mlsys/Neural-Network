@@ -10,28 +10,30 @@
 namespace layers {
 
 	using namespace std;
+	using namespace tensor;
+	using namespace ops;
 
 	template<class T>
 	class Layer {
 	public:
 		string name;
 		Shape shape;
-		Matrix<T> value;
+		Tensor<T> value;
 		Layer<T> *input;
 		Layer() {  }
 		Layer(Layer<T> *input) { setInput(input); }
 		Shape getShape() { return shape; }
-		virtual Matrix<T> getValue() { return value; }
+		virtual Tensor<T> getValue() { return value; }
 		virtual void setInput(Layer<T> *input) {
 			this->input = input;
 		}
-		virtual Matrix<T> forward(Matrix<T> &data) {
+		virtual Tensor<T> forward(Tensor<T> &data) {
 			if (input != nullptr)
 				return input->forward(data);// 让前面的输入节点向前传递data
 			else
 				return data;// 若是无输入节点，则返回
 		}
-		virtual Matrix<T> backward(Matrix<T> &delta) {
+		virtual Tensor<T> backward(Tensor<T> &delta) {
 			if (input != nullptr)
 				return input->backward(delta); // 让前面的输入节点向前传递delta
 			else
@@ -51,11 +53,11 @@ namespace layers {
 		Input(int size[]) : Layer<T>(nullptr) {
 			this->shape = Shape(size);
 		}
-		virtual Matrix<T> forward(Matrix<T> &data) {
+		virtual Tensor<T> forward(Tensor<T> &data) {
 			value = data;// 设置value为data，供后续节点使用
 			return value;// input节点不会有输入，所以直接返回x
 		}
-		virtual Matrix<T> backward(Matrix<T> &delta) {
+		virtual Tensor<T> backward(Tensor<T> &delta) {
 			return delta;// input节点不会有输入，所以直接返回delta
 		}
 	};
@@ -64,28 +66,26 @@ namespace layers {
 	template<class T>
 	class Linear : public Layer<T> {
 	private:
-		Matrix<T> w, b;
-		Matrix<T> grad_w, grad_b;
+		Tensor<T> w, b;
+		Tensor<T> grad_w, grad_b;
 	public:
 		Linear(int n_output) : Layer<T>(NULL) {
-			shape.setDims(n_output, 1);
+			shape.setDims(n_output, 3);
 		}
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
-			int n_output = shape[1];
 			Shape input_shape = input->getShape();
-			int size[] = { input_shape[0], shape[1] };
-			shape = Shape(size);
-			w = Matrix<T>(input_shape[1], n_output);
-			b = Matrix<T>(1, n_output);
+			// output_shape
+			w = Tensor<T>(1, 1, input_shape[2], shape[3]);// (1,1,row,col)
+			b = Tensor<T>(1, 1, input_shape[1], shape[1]);// (1,1,row,1)
 		}
-		virtual Matrix<T> forward(Matrix<T> data) {
-			Matrix<T> x = Layer<T>::forward(data);
+		virtual Tensor<T> forward(Tensor<T> data) {
+			Tensor<T> x = Layer<T>::forward(data);
 			value = x.matmul(w) + b;
 			return value;
 		}
-		virtual Matrix<T> backward(Matrix<T> &delta) {
-			Matrix<T> in = input->getValue();
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			Tensor<T> in = input->getValue();
 			grad_w = in.Transpose().matmul(delta);
 			grad_b = delta.reduce_sum(0);
 			return Layer<T>::backward(delta.matmul(w.Transpose()));
@@ -101,15 +101,15 @@ namespace layers {
 	template<class T>
 	class FullConnected : public Linear<T> {
 	private:
-		Matrix<T> grad;
+		Tensor<T> grad;
 		string activation;
 	public:
 		FullConnected(int n_output, string activation) : Linear<T>(n_output), activation(activation) { ; }
 		virtual void setInput(Layer<T> *input) {
 			Linear<T>::setInput(input);
 		}
-		virtual Matrix<T> forward(Matrix<T> &data) {
-			Matrix<T> x = Linear<T>::forward(data);
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Tensor<T> x = Linear<T>::forward(data);
 			if (activation == "sigmoid") {
 				value = x.sigmoid();
 				grad = ops::grad_sigmoid(value);
@@ -125,7 +125,7 @@ namespace layers {
 			return value;
 
 		}
-		virtual Matrix<T> backward(Matrix<T> &delta) {
+		virtual Tensor<T> backward(Tensor<T> &delta) {
 			return Linear<T>::backward(delta * grad);
 		}
 		virtual void update() {
@@ -137,16 +137,16 @@ namespace layers {
 	template<class T>
 	class Loss : Layer<T> {
 	private:
-		Matrix<T> y;
+		Tensor<T> y;
 	public:
-		Loss(Layer<T> *input, Matrix<T> y) :Layer<T>(input), y(y) { ; }
+		Loss(Layer<T> *input, Tensor<T> y) :Layer<T>(input), y(y) { ; }
 		double getLossValue() { return value.data[0][0]; }
-		virtual Matrix<T> forward(Matrix<T> &data) {
-			Matrix<T> x = Layer<T>::forward(data);
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Tensor<T> x = Layer<T>::forward(data);
 			value = ops::mse(x, y);
 		}
-		virtual Matrix<T> backward(Matrix<T> &delta) {
-			Matrix<T> x = input->getValue();
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			Tensor<T> x = input->getValue();
 			return input->backward(x - y);
 		}
 	};

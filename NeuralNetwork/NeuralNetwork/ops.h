@@ -3,72 +3,87 @@
 #ifndef _OPS_
 #define _OPS_
 
-#include "matrix.h"
+#include "tensor.h"
 
 namespace ops {
 
+	using namespace tensor;
+
+	namespace conv {
+
+		template<class T>
+		Tensor<T>& conv3d(Tensor<T> input, Tensor<T> kernel, int padding = 0) {
+			Shape spi = input.getShape();
+			Shape spk = kernel.getShape();
+			int sz[] = { spi[0], spi[1] - spk[1] + 1, spi[2] - spk[2] + 1, spi[3] };
+			Shape shape(sz);
+			Tensor<T> output(shape);
+			for (int i = 0; i < spi[0]; i++) {
+				__conv3d_(output[i], input, kernel);
+			}
+			return output;
+		}
+	}
+
+	using namespace tensor;
+
 	template<class T>
-	Matrix<T> dropout(Matrix<T> &x, double rate) {
-		Matrix<T> w = Matrix<T>::mask(x.shape(), 0.1, 1);
+	Tensor<T> dropout(Tensor<T> &x, double rate) {
+		Tensor<T> w = Tensor<T>::mask(x.shape(), 0.1, 1);
 		return w * x;
 	}
 
 	template<class T>
-	Matrix<T> matmul(Matrix<T> &a, Matrix<T> &b) {
+	Tensor<T> matmul(Tensor<T> &a, Tensor<T> &b) {
 		return a.matmul(b);
 	}
 
 	template<class T>
-	Matrix<T> softmax(Matrix<T> &m) {
-		Matrix<T> m_sum = m.exp();
+	Tensor<T> softmax(Tensor<T> &m) {
+		Tensor<T> m_sum = m.exp();
 		return m_sum / m_sum.reduce_sum(1);
 	}
 
 	template<class T>
-	Matrix<T> sigmoid(Matrix<T> &y) {
+	Tensor<T> sigmoid(Tensor<T> &y) {
 		return y.sigmoid();
 	}
 
 	template<class T>
-	Matrix<T> grad_sigmoid(Matrix<T> &y) {
-		int size[] = { y.row, y.col };
-		Matrix<T> ones = Matrix<T>::ones(Shape(size));
+	Tensor<T> grad_sigmoid(Tensor<T> &y) {
+		Tensor<T> ones = Tensor<T>::ones(y.getShape());
 		return y * (ones - y);
 	}
 
 	template<class T>
-	Matrix<T> grad_relu(Matrix<T> &x) {
-		Matrix<T> grad(x.row, x.col);
-		for (int i = 0; i < x.row; i++) {
-			for (int j = 0; j < x.col; j++) {
-				grad.data[i][j] = __relu_grad_(x.data[i][j]);
-			}
-		}
+	Tensor<T> grad_relu(Tensor<T> &x) {
+		Tensor<T> grad(x.getShape());
+		grad.foreach_assign([&](int i, int j, int k, int l) {
+			return __relu_grad_(x.getValue(i, j, k, l));
+		});
 		return grad;
 	}
 
 	template<class T>
-	Matrix<T> grad_relu(Matrix<T> &x, double max_value, double threshold, double negative_slope) {
-		Matrix<T> grad(x.row, x.col);
-		for (int i = 0; i < x.row; i++) {
-			for (int j = 0; j < x.col; j++) {
-				grad.data[i][j] = __relu_grad_(x.data[i][j], max_value, threshold, negative_slope);
-			}
-		}
+	Tensor<T> grad_relu(Tensor<T> &x, double max_value, double threshold, double negative_slope) {
+		Tensor<T> grad(x.getShape());
+		grad.foreach_assign([&](int i, int j, int k, int l) {
+			return __relu_grad_(x.data[i][j], max_value, threshold, negative_slope);
+		});
 		return grad;
 	}
 
 	// loss function
 	template<class T>
-	Matrix<T> mse(Matrix<T> &y_, Matrix<T> &y) {
-		Matrix<T> mse = (0.5 * (y_ - y)*(y_ - y)).reduce_mean(0).reduce_mean(1);
-		return mse;
+	Tensor<T> mse(Tensor<T> &y_, Tensor<T> &y) {
+		Tensor<T> mse = (0.5 * (y_ - y)*(y_ - y));
+		return mse.reduce_mean(2).reduce_mean(3);
 	}
 
 	template<class T>
-	Matrix<T> cross_entropy_loss(Matrix<T> &y_, Matrix<T> &y) {
-		Matrix<T> error = ((T)0.0f-(y*y_.log() + ((T)1.0f - y)*((T)1.0f - y_).log()));
-		return error.reduce_mean(0).reduce_mean(1);
+	Tensor<T> cross_entropy_loss(Tensor<T> &y_, Tensor<T> &y) {
+		Tensor<T> error = ((T)0.0f-(y*y_.log() + ((T)1.0f - y)*((T)1.0f - y_).log()));
+		return error.reduce_mean(2).reduce_mean(3);
 	}
 }
 
