@@ -374,17 +374,19 @@ namespace model {
 
 		srand((unsigned int)time(NULL));
 
-		Tensor<T> x_train, y_train, x_test;
+		Tensor<T> x_train, y_train, x_test, mat, filter;
 
 		load_data("x_train.txt", x_train);
 		load_data("y_train.txt", y_train);
-		load_data("x_test.txt", x_test);
+		load_data("x_test.txt", x_test); 
+		load_data("mat.txt", mat);
+		load_data("filter.txt", filter);
 
 		//Mat im = imread("timg.jpg", 1);
 		//imshow("ͼƬ", im);
 		//Tensor<T> tensor = image::im2tensor<T>(im);
 		
-		x_train.print();
+		//x_train.print();
 		//y_train.print();
 		//x_test.print();
 
@@ -392,20 +394,28 @@ namespace model {
 		//save_data("y_train.txt", x_train);
 		//save_data("x_test.txt", x_test);
 		{
-			Tensor<T> ones(1, 5, 5, 3);
-			ones.foreach_assign([&](int i, int j, int k, int l){
-				return 1;
-			});
-			Tensor<T> filter(1, 3, 3, 3);
-			filter.foreach_assign([&](int i, int j, int k, int l) {
-				return 1;
-			});
-			cout << "x_train.padding(1).print();" << endl;
-			ones = ones.padding(1);
-			ones.print();
-			cout << "ones.conv2d(filter, 2).print();" << endl;
-			ones = ones.conv2d(filter, 2);
-			ones.print();
+			
+			mat.print();
+			
+			//cout << "x_train.padding(1).print();" << endl;
+			//mat = mat.padding(1);
+			//mat.print();
+			//cout << "ones.conv2d(filter, 1).print();" << endl;
+			int order[] = { 0, 2, 3, 1 };
+			filter = filter.permute(order);
+			filter.print();
+			
+
+			int order1[] = { 0, 3, 1, 2 };
+			mat.permute(order).padding(1).permute(order1).print();
+
+			mat.permute(order).padding(1).conv3d(filter, 2).permute(order1).print();
+			//mat.padding(1).conv3d(filter, 2).permute(order1).print();
+			//mat.print();
+			int after[] = { 1, 1, 1, 75 };
+			int before[] = { 1, 3, 5, 5 };
+			mat.reshape(after).reshape(before).print();
+			mat.flatten().reshape(before).print();
 			getchar();
 		}
 		//tensor::test<T>();

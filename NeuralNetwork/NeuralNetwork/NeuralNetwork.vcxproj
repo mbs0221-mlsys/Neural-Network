@@ -141,6 +141,8 @@
   <ItemGroup>
     <Text Include="softmax.txt" />
     <Text Include="Text.txt" />
+    <Text Include="mat.txt" />
+    <Text Include="filter.txt" />
     <Text Include="x_test.txt" />
     <Text Include="x_train.txt" />
     <Text Include="y_pred.txt" />

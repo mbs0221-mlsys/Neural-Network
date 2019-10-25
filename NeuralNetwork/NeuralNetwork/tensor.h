@@ -257,17 +257,42 @@ namespace tensor {
 			return out;
 		}
 		Tensor<T> permute(int order[]) {
-			// º∆À„Œ¨∂»
+			// º∆À„Œ¨∂»(2 1 3 0)
 			int size[] = { 0, 0, 0, 0 };
 			for (int i = 0; i < 4; i++) {
 				size[i] = shape[order[i]];
 			}
 			Shape shape_out(size);
 			Tensor<T> out = Tensor<T>::zeros(shape_out);
-			// TODO: ÷√ªª≤Ÿ◊˜
+			// ÷√ªª≤Ÿ◊˜
 			out.foreach_assign([&](int i, int j, int k, int l) {
-				return (*this)->getValue(i, j, k, l);
+				int subs[] = { 0, 0, 0, 0 };// subscripts
+				subs[order[0]] = i; // 2, i
+				subs[order[1]] = j; // 1, j
+				subs[order[2]] = k; // 3, k
+				subs[order[3]] = l; // 0, l
+				return this->getValue(subs[0], subs[1], subs[2], subs[3]);
 			});
+			return out;
+		}
+		Tensor<T> reshape(int size[]) {
+			Shape shape_out(size);
+			Tensor<T> out = Tensor<T>::zeros(shape_out);
+			out.foreach_assign([&](int i, int j, int k, int l) {
+				int idx = shape_out.sub2ind(i, j, k, l);
+				return data[idx];
+			});
+			return out;
+		}
+		Tensor<T> flatten() {
+			int after[] = { 1, 1, 1, length() };
+			Shape shape_out(after);
+			Tensor<T> out = Tensor<T>::zeros(shape_out);
+			out.foreach_assign([&](int i, int j, int k, int l) {
+				int idx = shape_out.sub2ind(i, j, k, l);
+				return data[idx];
+			});
+			return out;
 		}
 		Tensor<T> reduce_sum(int axis) {
 			// frame, width(column), height(row), channel. 
@@ -386,20 +411,55 @@ namespace tensor {
 			return out;
 		}
 		Tensor<T> conv2d(Tensor<T> filter, int stride) {
+			// calculate output shape
 			Shape filter_shape = filter.getShape();// (1, width, height, channel)
-			int width = (shape[1] - filter_shape[1]) / stride + 1;
-			int height = (shape[2] - filter_shape[2]) / stride + 1;
-			int size[] = { shape[0], width, height, shape[3] };
+			int width = (shape[1] - filter_shape[1]) / stride + 1;// new height
+			int height = (shape[2] - filter_shape[2]) / stride + 1;// new height
+			int channel = filter_shape[0];// number of filters
 			// calculate 2d concolution
-			T *value = new T[size[3]];
+			T *value = new T[channel];
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
 			out.foreach_assign([&](int oi, int oj, int ok, int ol) {
-				value[ol] = 0.0f;// for each channel
-				filter.foreach([&](int ki, int kj, int kk, int kl) {
-					value[kl] += this->getValue(oi, oj*stride + kj, ok*stride + kk, ol + kl)*filter.getValue(0, kj, kk, kl);
-				});
-				return value[ol];
+				if (ol == 0) {
+					memset(value, 0.0f, sizeof(T)*channel);
+					// calculate for all filters (filter, width, height, channel)
+					filter.foreach([&](int ki, int kj, int kk, int kl) {
+						// for each filter (:, width, height, channel)
+						T a = this->getValue(oi, oj*stride + kj, ok*stride + kk, kl);
+						T b = filter.getValue(ki, kj, kk, kl);
+					});
+				}
+				// save each result from each filter (frame, width, height, channel)
+				return value[ol];//	out.setValue(value[ol], oi, oj, ok, ol);
 			});
+			delete[] value;
+			return out;
+		}
+		Tensor<T> conv3d(Tensor<T> filter, int stride) {
+			// calculate output shape
+			Shape filter_shape = filter.getShape();// (1, width, height, channel)
+			int width = (shape[1] - filter_shape[1]) / stride + 1;// new height
+			int height = (shape[2] - filter_shape[2]) / stride + 1;// new height
+			int channel = filter_shape[0];// number of filters
+			int size[] = { shape[0], width, height, channel };
+			// calculate 3d concolution
+			T *value = new T[channel];			
+			Tensor<T> out = Tensor<T>::zeros(Shape(size));
+			out.foreach_assign([&](int oi, int oj, int ok, int ol) {
+				if (ol ==  0) {
+					memset(value, 0.0f, sizeof(T)*channel);
+					// calculate for all filters (filter, width, height, channel)
+					filter.foreach([&](int ki, int kj, int kk, int kl) {
+						// for each filter (:, width, height, channel)
+						T a = this->getValue(oi, oj*stride + kj, ok*stride + kk, kl);
+						T b = filter.getValue(ki, kj, kk, kl);						
+						value[ki] = value[ki] + a*b;
+					});
+				}
+				// save each result from each filter (frame, width, height, channel)
+				return value[ol];//	out.setValue(value[ol], oi, oj, ok, ol);
+			});
+			delete[] value;
 			return out;
 		}
 
