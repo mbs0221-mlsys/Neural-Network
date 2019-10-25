@@ -388,7 +388,7 @@ namespace model {
 		printf("model::test()\n");
 		//bp_network::test<T>(x_train, y_train, x_test);
 		//fc_network::test<T>(x_train, y_train, x_test);
-		auto_encoder::test<T>(x_train, y_train, x_test);
+		//auto_encoder::test<T>(x_train, y_train, x_test);
 		//gan::test<T>(x_train, y_train, x_test);
 	}
 }

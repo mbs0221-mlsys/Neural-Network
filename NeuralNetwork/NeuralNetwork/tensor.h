@@ -591,6 +591,10 @@ namespace tensor {
 		return foreach_elem(x, y, [](T a, T b) { return a / b; });
 	}
 
+	template<class T>
+	void test() {
+
+	}
 }
 
 #endif // !_TENSOR_H_
