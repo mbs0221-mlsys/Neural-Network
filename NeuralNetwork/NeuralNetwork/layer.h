@@ -4,6 +4,7 @@
 #define _LAYER_H_
 
 #include <map>
+#include <string>
 
 #include "ops.h"
 
@@ -73,13 +74,15 @@ namespace layers {
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
 			Shape input_shape = input->getShape();
+			int size[] = { NULL, NULL, input_shape[3], shape[3] };
+			shape = Shape(size);
 			// output_shape
 			w = Tensor<T>(1, 1, input_shape[3], shape[3]);// (1,1,row,col)
 			b = Tensor<T>(1, 1, 1, shape[3]);// (1,1,1,col)
 		}
 		virtual Tensor<T> forward(Tensor<T> data) {
 			Tensor<T> x = Layer<T>::forward(data);
-			value = x.matmul(w) + b;
+			value = x.matmul(w) + b;// TODO: matrix+vector
 			return value;
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
@@ -132,7 +135,7 @@ namespace layers {
 
 	template<class T>
 	class Flatten : public Layer<T> {
-	private;
+	private:
 		Shape before;
 	public:
 		Flatten() : Layer<T>() { ; }
@@ -140,9 +143,9 @@ namespace layers {
 			Layer<T>::setInput(input);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			Tensor<T> x = Linear<T>::forward(data);
+			Tensor<T> x = Layer<T>::forward(data);
 			before = x.getShape();// privious shape
-			value = x.flatten();
+			value = x.flatten(); // merge last two dimensions
 			return value;
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {

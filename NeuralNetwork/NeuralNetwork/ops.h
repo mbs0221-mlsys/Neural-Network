@@ -9,6 +9,35 @@ namespace ops {
 
 	using namespace tensor;
 
+	template<class T>
+	class MetaFunction {
+	private:
+		T(*primary)();
+		T(*dual)();
+	public:
+		MetaFunction(T(*primary)(T), T(*dual)(T))
+			: primary(primary), dual(dual) {
+		}
+		void calculate(T t) {
+			primary(t);
+			dual(t);
+		}
+		static MetaFunction<T> sigmoid;
+		static MetaFunction<T> relu;
+	};
+
+	template<class T>
+	MetaFunction<T> MetaFunction<T>::sigmoid = MetaFunction<T> {
+		.primary = __sigmoid_,
+		.dual = __sigmoid_grad_
+	};
+
+	template<class T>
+	MetaFunction<T> MetaFunction<T>::relu = MetaFunction<T> {
+		.primary = __relu_,
+		.dual = __relu_grad_
+	};
+
 	namespace conv {
 
 		template<class T>
@@ -59,7 +88,7 @@ namespace ops {
 	Tensor<T> grad_relu(Tensor<T> &x) {
 		Tensor<T> grad(x.getShape());
 		grad.foreach_assign([&](int i, int j, int k, int l) {
-			return __relu_grad_(x.getValue(i, j, k, l));
+			return __relu_grad_(x.at(i, j, k, l));
 		});
 		return grad;
 	}

@@ -5,6 +5,8 @@
 
 #define _EDG_ 1
 
+#include <vector>
+
 #include "layer.h"
 #include "optimizer.h"
 #include "image.h"
@@ -209,6 +211,7 @@ namespace model {
 
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
+			layers.push_back(new Flatten<T>());
 			layers.push_back(new FullConnected<T>(11, "sigmoid"));
 			layers.push_back(new FullConnected<T>(9, "sigmoid"));
 			layers.push_back(new FullConnected<T>(7, "sigmoid"));
@@ -222,10 +225,12 @@ namespace model {
 		void test(Tensor<T> &x_train, Tensor<T> &y_train, Tensor<T> &x_test) {
 
 			printf("fc_network::test()\n");
-
+			int size[] = { 1, 178, 3, 4 };
 			Model<T> *fc_network = create_fc_network<T>();
 			fc_network->compile(std::string("least_squares"), Optimizer<T>(0.9));
-			fc_network->train(x_train, y_train.one_hot(3));
+			Tensor<T> x = x_train.slice(0, 12, 3).reshape(size);
+			Tensor<T> y = y_train.one_hot(3);
+			fc_network->train(x, y);
 		}
 	}
 
@@ -420,7 +425,7 @@ namespace model {
 		}
 		//tensor::test<T>();
 		//bp_network::test<T>(x_train, y_train, x_test);
-		//fc_network::test<T>(x_train, y_train, x_test);
+		fc_network::test<T>(x_train, y_train, x_test);
 		//auto_encoder::test<T>(x_train, y_train, x_test);
 		//gan::test<T>(x_train, y_train, x_test);
 	}

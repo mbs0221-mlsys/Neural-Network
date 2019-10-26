@@ -31,7 +31,7 @@ namespace shape {
 		void print() {
 			printf_s("Shape(%d, %d, %d, %d)\n", dims[0], dims[1], dims[2], dims[3]);
 		}
-		inline void setDims(int k, int axis) {
+		inline void set(int k, int axis) {
 			dims[axis] = k;
 		}
 		inline int operator[](int k) const  {

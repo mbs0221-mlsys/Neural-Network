@@ -5,6 +5,9 @@
 #include <opencv2\opencv.hpp>
 #include <opencv\cv.h>
 
+#include <easyx.h>
+#include <graphics.h>
+
 #include "tensor.h"
 
 namespace image {
@@ -29,7 +32,7 @@ namespace image {
 		Vec3b pixel;
 		Tensor<T> tensor(1, im.rows, im.cols, im.channels);
 		tensor.foreach([&](int i, int j, int k, int l) {
-			uchar value = (uchar)(tensor.getValue(0, j, k, l));
+			uchar value = (uchar)(tensor.at(0, j, k, l));
 			pixel[l] = value;// BGR
 			if (l == shape[3] - 1) {
 				mat.at<Vec3b>(j, k) = pixel;
