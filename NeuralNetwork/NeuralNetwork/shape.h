@@ -34,8 +34,29 @@ namespace shape {
 		inline void set(int k, int axis) {
 			dims[axis] = k;
 		}
+		inline void set(int i, int j, int k, int l) {
+			dims[0] = i;
+			dims[1] = j;
+			dims[2] = k;
+			dims[3] = l;
+		}
 		inline int operator[](int k) const  {
 			return dims[k];
+		}
+		Shape& flatten(int axis) {
+			if (axis == 0) {
+				// merge all dims to one dimension
+				set(1, 1, 1, dims[0] * dims[1] * dims[2] * dims[3]);
+			}
+			else if (axis == 1) {
+				// merge last three dimensions
+				set(1, 1, dims[0], dims[1] * dims[2] * dims[3]);
+			}
+			else {
+				// merge last two dimensions
+				set(1, dims[0], dims[1], dims[2] * dims[3]);
+			}
+			return (*this);
 		}
 		int size() {
 			return (dims[0] * dims[1] * dims[2] * dims[3]);

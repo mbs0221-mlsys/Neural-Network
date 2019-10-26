@@ -47,6 +47,9 @@
     <ClCompile Include="model.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="tensor.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="softmax.txt">

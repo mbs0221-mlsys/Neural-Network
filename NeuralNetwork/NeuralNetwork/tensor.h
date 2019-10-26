@@ -13,6 +13,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <map>
 
 #include "shape.h"
 
@@ -67,8 +68,6 @@ inline T __relu_grad_(T x, double max_value, double threshold, double negative_s
 		return negative_slop;
 	}
 }
-
-
 
 namespace tensor {
 
@@ -299,18 +298,8 @@ namespace tensor {
 		}
 		Tensor<T> flatten(int axis = 2) {
 			// merge last two dimensions by default
-			int after[4];
-			if (axis == 0) {
-				// merge all dims to one dimension
-				after = { 1, 1, 1, shape[0] * shape[1] * shape[2] * shape[3] };
-			} else if (axis == 1) {
-				// merge last three dimensions
-				after = { 1, 1, shape[0], shape[1] * shape[2] * shape[3] };
-			} else {
-				// merge last two dimensions
-				after = { 1, shape[0], shape[1], shape[2] * shape[3] };
-			}
-			return reshape(after);
+			Shape shape_out = shape;
+			return reshape(shape_out.flatten(2));
 		}
 		Tensor<T> reduce_sum(int axis) {
 			// frame, width(column), height(row), channel. 
@@ -436,6 +425,7 @@ namespace tensor {
 			int width = (shape[1] - filter_shape[1]) / stride + 1;// new height
 			int height = (shape[2] - filter_shape[2]) / stride + 1;// new height
 			int channel = filter_shape[0];// number of filters
+			int size[] = { shape[0], width, height, channel };
 			// calculate 2d concolution
 			T *value = new T[channel];
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
@@ -514,24 +504,26 @@ namespace tensor {
 		}
 		Tensor<T> relu(double max_value, double threshold = 0.0f, double negative_slop = 0.1f) {
 			return __foreach_elem_assign_([=](T x) {
-				return relu(x, max_value, threshold, negative_slop);
+				return __relu_(x, max_value, threshold, negative_slop);
 			});
 		}
 		Tensor<T> hinge(T t) {
 			return __foreach_elem_assign_([=](T x) {
 				int y = 1 - t * x;
-				return max(0, y);
+				return ((y > 0) ? y : 0);
 			});
 		}
 		Tensor<T> tanh() {
 			return __foreach_elem_assign_([=](T x) {
-				return ((exp(x) - exp(-x)) / (exp(x) + exp(-x)));
+				T exp_p = __exp_(x);
+				T exp_n = __exp_(-x);
+				return ((exp_p - exp_n) / (exp_p + exp_n));
 			});
 		}
 		Tensor<T> neg() {
 			return __foreach_elem_assign_([=](T x) {
 				return -x;
-			})
+			});
 		}
 		Tensor<T> randomize() {
 			foreach_elem_assign([](int i) {
@@ -631,6 +623,24 @@ namespace tensor {
 			return out;
 		}
 
+		// file input/output
+		void load(string path) {
+			ifstream inf;
+			inf.open(path, ios::in);
+			if (inf.is_open()) {
+				inf >> (*this);
+				inf.close();
+			}
+		}
+		void save(string path) {
+			ifstream inf;
+			inf.open(path, ios::in);
+			if (inf.is_open()) {
+				inf >> (*this);
+				inf.close();
+			}
+		}
+
 		// serialize & deserialize
 		friend istream& operator >> (istream &in, Tensor<T> &tensor) {
 			in >> tensor.shape;
@@ -679,25 +689,9 @@ namespace tensor {
 	Tensor<T> operator /(T x, Tensor<T> &y) {
 		return foreach_elem(x, y, [](T a, T b) { return a / b; });
 	}
-
+	
 	template<class T>
-	void test() {
-		printf("tensor::test()\n");
-		int size[]= { 1,1,4,3 };
-		Shape shape(size);
-		{
-			Tensor<T> x = Tensor<T>::ones(shape);
-			x.print();
-			Tensor<T> b = Tensor<T>::zeros(shape);
-			b.print();
-			Tensor<T> c = Tensor<T>::mask(shape, 0.2);
-			c.print();
-			cout << "c.Transpose().sigmoid().print();" << endl;
-			c.Transpose().sigmoid().print();
-			cout << "x.matmul(c.Transpose()).reduce_mean(2).reduce_mean(3).print();" << endl;
-			x.matmul(c.Transpose()).reduce_mean(2).reduce_mean(3).print();
-		}
-	}
+	void test();
 }
 
 #endif // !_TENSOR_H_
