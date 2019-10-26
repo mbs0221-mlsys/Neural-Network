@@ -18,7 +18,7 @@ namespace layers {
 
 	template<class T>
 	class Layer {
-	private:
+	protected:
 		string name;
 		Shape shape;
 		Layer<T> *input;
@@ -100,13 +100,15 @@ namespace layers {
 
 	template<class T>
 	class Convolution : public Layer<T> {
-	private:
+	protected:
 		Tensor<T> filter;
+		int padding;
 		int stride;
 		string activation;
 	public:
-		Convolution(int width = 3, int stride = 1, int n_filters = 1, string activation = "sigmoid") 
-			: Layer<T>(), activation(activation) {
+		Convolution(int width = 3, int padding=0, int stride = 1,
+			int n_filters = 1, string activation = "sigmoid") 
+			: Layer<T>(), padding(padding), stride(stride), activation(activation) {
 			Shape filter_shape(n_filters, width, width, 1);
 			filter = Tensor<T>(filter_shape);
 		}
@@ -117,17 +119,29 @@ namespace layers {
 			filter_shape.set(3, input_shape[3]);// n_channels
 			filter = Tensor<T>(filter_shape);
 		}
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Tensor<T> m_data = Layer<T>::forward(data);
+			return m_data.padding(padding);
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			Tensor<T> m_delta = delta.clipping(padding);
+			return Layer<T>::backward(m_delta);
+		}
 	};
 
 	template<class T>
 	class Conv2D : public Convolution<T> {
 	public:
-		Conv2D(int width = 3, int stride = 1, int n_filters = 1, string activation = "sigmoid")
-			: Convolution<T>(width, stride, n_filters, activation) {
+		Conv2D(int width = 3, int padding=0, int stride = 1,
+			int n_filters = 1, string activation = "sigmoid")
+			: Convolution<T>(width, padding, stride, n_filters, activation) {
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			Tensor<T> x = Layer<T>::forward(data);
+			Tensor<T> x = Convolution<T>::forward(data);
 			return x.conv2d(filter, stride);
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return Convolution<T>::backward(delta);
 		}
 	};
 
@@ -138,14 +152,18 @@ namespace layers {
 		int stride;
 		string activation;
 	public:
-		Conv3D(int width=3, int stride=1, int n_filters=1, string activation="sigmoid")
-			: Convolution<T>(width, stride, n_filters, activation) {
+		Conv3D(int width = 3, int padding = 0, int stride = 1,
+			int n_filters = 1, string activation = "sigmoid")
+			: Convolution<T>(width, padding, stride, n_filters, activation) {
 			Shape filter_shape(n_filters, width, width, 1);
 			filter = Tensor<T>(filter_shape);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			Tensor<T> x = Layer<T>::forward(data);
+			Tensor<T> x = Convolution<T>::forward(data);
 			return x.conv3d(filter, stride);
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return Convolution<T>::backward(data);
 		}
 	};
 
@@ -170,7 +188,7 @@ namespace layers {
 	};
 
 	template<class T>
-	class MaxPooling : protected Pooling<T> {
+	class MaxPooling : public Pooling<T> {
 	private:
 		Tensor<T> input_value;
 	public:
@@ -186,7 +204,7 @@ namespace layers {
 	};
 
 	template<class T>
-	class MinPooling : protected Pooling<T> {
+	class MinPooling : public Pooling<T> {
 	private:
 		Tensor<T> input_value;
 	public:
@@ -202,7 +220,7 @@ namespace layers {
 	};
 
 	template<class T>
-	class AvgPooling : protected Pooling<T> {
+	class AvgPooling : public Pooling<T> {
 	public:
 		AvgPooling(int width, string activation = "sigmoid")
 			: Pooling<T>(width, activation) { ; }
@@ -237,7 +255,7 @@ namespace layers {
 	};
 
 	template<class T>
-	class FullConnected : public Layer<T>, Activation<T> {
+	class FullConnected : public Layer<T> {
 	private:
 		Tensor<T> x, w, b;
 		Tensor<T> grad_w, grad_b;

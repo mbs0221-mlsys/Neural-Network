@@ -485,18 +485,27 @@ namespace tensor {
 			return out;
 		}
 		
-		// padding operation
-		Tensor<T> padding(int pad) {
-			int size[] = { shape[0], shape[1] + pad*2, shape[2] + pad*2, shape[3] };
+		// padding/clipping operation
+		Tensor<T> padding(int width) {
+			int size[] = { shape[0], shape[1] + width*2, shape[2] + width*2, shape[3] };
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
 			// calculate 2d padding
 			foreach([&](int ii, int ij, int ik, int il) {
 				T value = this->at(ii, ij, ik, il);
-				out.set(value, ii, ij + pad, ik + pad, il);
+				out.set(value, ii, ij + width, ik + width, il);
 			});
 			return out;
 		}
-		
+		Tensor<T> clipping(int margin) {
+			int size[] = { shape[0], shape[1] - margin*2, shape[2] - margin*2, shape[3] };
+			Tensor<T> out = Tensor<T>::zeros(Shape(size));
+			// calculate 2d clipping
+			out.foreach_assign([&](int ii, int ij, int ik, int il) {
+				return = this->at(ii, ij + margin, ik + margin, il);
+			});
+			return out;
+		}
+
 		// convolution operation
 		Tensor<T> conv2d(Tensor<T> filter, int stride) {
 			// calculate output shape
@@ -545,15 +554,32 @@ namespace tensor {
 		}
 		
 		// pooling operation
-		Tensor<T> max_pooling(int size) {
-			return __pooling_(size, [](T a, T b)->T { return ((a > b) ? (a) : (b)); });
+		Tensor<T> max_pooling(int width) {
+			return __pooling_(width, [](T a, T b)->T { return ((a > b) ? (a) : (b)); });
 		}
-		Tensor<T> min_pooling(int size) {
-			return __pooling_(size, [](T a, T b)->T { return ((a < b) ? (a) : (b)); });
+		Tensor<T> min_pooling(int width) {
+			return __pooling_(width, [](T a, T b)->T { return ((a < b) ? (a) : (b)); });
 		}
-		Tensor<T> avg_pooling(int size) {
-			Tensor<T> out = __pooling_(size, [](T a, T b)->T { return a + b; });
-			return out / (size*size);
+		Tensor<T> avg_pooling(int width) {
+			Tensor<T> out = __pooling_(width, [](T a, T b)->T { return a + b; });
+			return out / (width*width);
+		}
+
+		// kronecker
+		Tensor<T> kronecker(Tensor<T> tensor) {
+			Shape spk = tensor.getShape();
+			Shape spo(shape[0] * spk[0], shape[1] * spk[1],
+				shape[2] * spk[2], shape[3] * spk[3]);
+			Tensor<T> out = Tensor<T>::zeros(spo);
+			foreach([&](int ii, int ij, int ik, int il) {
+				T a = this->at(ii, ij, ik, il);
+				tensor.foreach([&](int ki, int kj, int kk, int kl) {
+					T value = a * tensor.at(ki, kj, kk, kl);					
+					out.set(value, ii*spk[0] + ki, ij*spk[1] + kj,
+						ik*spk[2] + kk, il*spk[3] + kl);
+				});
+			});
+			return out;
 		}
 
 		// upsampling
@@ -564,21 +590,11 @@ namespace tensor {
 			__upsampling_(input, width, [](T a, T b)->bool {return a < b; });
 		}
 		Tensor<T> avg_upsampling(int width) {
-			// calculate area and shape
-			int area = width*width;
-			Shape output_shape(shape[0], shape[1]*width, shape[2]*width, shape[3]);
 			// calculate 2d up_sampling (AVG)
-			Tensor<T> out = Tensor<T>::zeros(output_shape);
-			foreach([&](int oi, int oj, int ok, int ol) {
-				// average upsampling
-				T value = this->at(oi, oj, ok, ol) / area;
-				for (int j = 0; j < width; j++) {
-					for (int k = 0; k < width; k++) {
-						out.set(value, oi, oj*width + j, ok*width + k, ol);
-					}
-				}
-			});
-			return out;
+			Shape shape(1, width, width, 1);
+			Tensor<T> tensor = Tensor<T>::ones(shape);
+			tensor = tensor / (width*width);
+			return this->kronecker(tensor);
 		}
 		
 		// math function
