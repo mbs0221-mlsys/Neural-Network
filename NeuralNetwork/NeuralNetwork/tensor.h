@@ -507,9 +507,11 @@ namespace tensor {
 		}
 
 		// convolution operation
-		Tensor<T> conv2d(Tensor<T> filter, int stride) {
+		Tensor<T> conv2d(Tensor<T> &filter, int stride) {
+			// rotate 180 degree
+			Tensor<T> m_filter = filter.rotate180();
 			// calculate output shape
-			Shape filter_shape = filter.getShape();// (1, width, height, channel)
+			Shape filter_shape = m_filter.getShape();// (1, width, height, channel)
 			int width = (shape[1] - filter_shape[1]) / stride + 1;// new height
 			int height = (shape[2] - filter_shape[2]) / stride + 1;// new height
 			int channel = filter_shape[0];// number of filters
@@ -519,9 +521,9 @@ namespace tensor {
 			out.foreach([&](int oi, int oj, int ok, int ol) {
 				if (ol == 0) {
 					// (:,:,:,kc)*(1,:,:,kc)
-					filter.foreach([&](int ki, int kj, int kk, int kl) {
+					m_filter.foreach([&](int ki, int kj, int kk, int kl) {
 						T a = this->at(oi, oj*stride + kj, ok*stride + kk, kl);		// original image
-						T b = filter.at(ki, kj, kk, kl);							// filter
+						T b = m_filter.at(ki, kj, kk, kl);							// filter
 						T o = out.at(oi, oj, ok, kl);								// accumulate
 						out.set((o + a*b), oi, oj, ok, kl); // for each channel
 					});

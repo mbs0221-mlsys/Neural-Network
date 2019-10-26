@@ -131,17 +131,20 @@ namespace layers {
 
 	template<class T>
 	class Conv2D : public Convolution<T> {
+	private:
+		Tensor<T> input_value;
 	public:
 		Conv2D(int width = 3, int padding=0, int stride = 1,
 			int n_filters = 1, string activation = "sigmoid")
 			: Convolution<T>(width, padding, stride, n_filters, activation) {
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			Tensor<T> x = Convolution<T>::forward(data);
-			return x.conv2d(filter, stride);
+			input_value = Convolution<T>::forward(data);
+			return input_value.conv2d(filter, stride);
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			return Convolution<T>::backward(delta);
+			Tensor<T> m_delta = input_value.conv2d(delta.rotate180(), stride);
+			return Convolution<T>::backward(m_delta.rotate180());
 		}
 	};
 
