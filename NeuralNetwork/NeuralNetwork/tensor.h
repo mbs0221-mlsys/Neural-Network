@@ -147,7 +147,7 @@ namespace tensor {
 			return out;
 		}
 
-		// pooling
+		// pooling/upsampling
 		inline Tensor<T> __pooling_(int size, T (*func)(T, T)) {
 			// calculate shape
 			Shape output_shape = shape;
@@ -166,6 +166,27 @@ namespace tensor {
 					}
 				}
 				return value;
+			});
+			return out;
+		}
+		inline Tensor<T> __upsampling_(Tensor<T> &input, int size, bool(*comp)(T, T)) {
+			// calculate 2d up_sampling (MAX, MIN)
+			Tensor<T> out = Tensor<T>::zeros(input.getShape());
+			foreach([&](int oi, int oj, int ok, int ol) {
+				T value = this->at(oi, oj, ok, ol);
+				// find the position of value (MAX, MIN) in input
+				int pj, pk;
+				pj = pk = 0;
+				for (int j = 0; j < size; j++) {
+					for (int k = 0; k < size; k++) {
+						T curr = input.at(oi, oj*size + j, ok*size + k, ol);
+						if (comp(value, curr)) {
+							pj = j, pk = k;
+						}
+					}
+				}
+				// assign corresponding value
+				out.set(value, oi, oj*size + pj, ok*size + pk, ol);
 			});
 			return out;
 		}
@@ -536,30 +557,19 @@ namespace tensor {
 		}
 
 		// upsampling
-		Tensor<T> upsampling(Tensor<T> &input, int size) {
-			// calculate 2d up_sampling (MAX, MIN)
-			Tensor<T> out = Tensor<T>::zeros(input.getShape());
-			foreach([&](int oi, int oj, int ok, int ol) {
-				T value = this->at(oi, oj, ok, ol);
-				// find the position of value (MAX, MIN) in input
-				for (int j = 0; j < size; j++) {
-					for (int k = 0; k < size; k++) {
-						T curr = input.at(oi, oj*size + j, ok*size + k, ol);
-						if (value == curr) {
-							out.set(value, oi, oj*size + j, ok*size + j, ol);
-							break;
-						}
-					}
-				}
-			});
-			return out;
+		Tensor<T> max_upsampling(Tensor<T> &input, int size) {
+			__upsampling_(input, size, [](T a, T b)->bool {return a > b; });
 		}
-		Tensor<T> avg_upsampling(Tensor<T> &input, int size) {
+		Tensor<T> min_upsampling(Tensor<T> &input, int size) {
+			__upsampling_(input, size, [](T a, T b)->bool {return a < b; });
+		}
+		Tensor<T> avg_upsampling(int size) {
 			// calculate area
 			int area = size*size;
 			// calculate 2d up_sampling (AVG)
 			Tensor<T> out = Tensor<T>::zeros(input.getShape());
 			foreach([&](int oi, int oj, int ok, int ol) {
+				// average upsampling
 				T value = this->at(oi, oj, ok, ol) / area;
 				for (int j = 0; j < size; j++) {
 					for (int k = 0; k < size; k++) {

@@ -21,7 +21,7 @@ namespace layers {
 		Shape shape;
 		Tensor<T> value;
 		Layer<T> *input;
-		Layer() {  }
+		Layer() : input(nullptr) {  }
 		Layer(Layer<T> *input) { setInput(input); }
 		Shape getShape() { return shape; }
 		virtual Tensor<T> getValue() { return value; }
@@ -62,13 +62,78 @@ namespace layers {
 		}
 	};
 
+	enum POOLING { MAX_POOLING, MIN_POOLING, AVG_POOLING };
+
+	template<class T>
+	class Pooling : public Layer<T> {
+	private:
+		POOLING type;
+		int size;
+	public:
+		Pooling(int size, POOLING type) : Layer<T>(), size(size), (type) { ; }
+		virtual void setInput(Layer<T> *input) {
+			Layer<T>::setInput(input);
+		}
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			switch (type) {
+			case POOLING::MAX_POOLING:
+				value = data.max_pooling(size);
+				break;
+			case POOLING::MIN_POOLING:
+				value = data.min_pooling(size);
+				break;
+			case POOLING::AVG_POOLING:
+				value = data.avg_pooling(size);
+				break;
+			default:// average pooling by default
+				value = data.avg_pooling(size);
+				break;
+			}
+			return value;
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			Tensor<T> x = input->getValue();
+			switch (type) {
+			case POOLING::MAX_POOLING:
+				return Layer<T>::backward(delta.max_sampling(x, size));
+			case POOLING::MIN_POOLING:
+				return Layer<T>::backward(delta.min_upsampling(x, size));
+			case POOLING::AVG_POOLING:
+				return Layer<T>::backward(delta.avg_upsampling(size));
+			default:
+				return Layer<T>::backward(delta.avg_upsampling(size));
+				break;
+			}
+		}
+	};
+
+	template<class T>
+	class Flatten : public Layer<T> {
+	private:
+		Shape before;
+	public:
+		Flatten() : Layer<T>() { ; }
+		virtual void setInput(Layer<T> *input) {
+			Layer<T>::setInput(input);
+		}
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Tensor<T> x = Layer<T>::forward(data);
+			before = x.getShape();// privious shape
+			value = x.flatten(); // merge last two dimensions
+			return value;
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return Layer<T>::backward(delta.reshape(before)); // restore privious shape
+		}
+	};
+
 	template<class T>
 	class Linear : public Layer<T> {
 	private:
 		Tensor<T> w, b;
 		Tensor<T> grad_w, grad_b;
 	public:
-		Linear(int n_output) : Layer<T>(NULL) {
+		Linear(int n_output) : Layer<T>() {
 			shape.setDims(n_output, 3);
 		}
 		virtual void setInput(Layer<T> *input) {
@@ -129,26 +194,6 @@ namespace layers {
 		}
 		virtual void update() {
 			Linear<T>::update();
-		}
-	};
-
-	template<class T>
-	class Flatten : public Layer<T> {
-	private:
-		Shape before;
-	public:
-		Flatten() : Layer<T>() { ; }
-		virtual void setInput(Layer<T> *input) {
-			Layer<T>::setInput(input);
-		}
-		virtual Tensor<T> forward(Tensor<T> &data) {
-			Tensor<T> x = Layer<T>::forward(data);
-			before = x.getShape();// privious shape
-			value = x.flatten(); // merge last two dimensions
-			return value;
-		}
-		virtual Tensor<T> backward(Tensor<T> &delta) {
-			return Layer<T>::backward(delta.reshape(before)); // restore privious shape
 		}
 	};
 
