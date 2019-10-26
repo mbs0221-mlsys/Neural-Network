@@ -47,12 +47,23 @@ void tensor::test() {
 		mat.print();
 
 		pooling.print();
-		cout << "pooling.max_pooing();" << endl;
+		cout << "pooling;" << endl;
 		pooling.permute(after).max_pooling(2).permute(before).print();
 		pooling.permute(after).min_pooling(2).permute(before).print();
 		pooling.permute(after).avg_pooling(2).permute(before).print();
 
-		cout << "filter.rotate180().permute(before);" << endl;
+		auto x = pooling.permute(after).max_pooling(2);
+		x.upsampling(pooling.permute(after), 2).permute(before).print();
+
+		auto y = pooling.permute(after).min_pooling(2);
+		y.upsampling(pooling.permute(after), 2).permute(before).print();
+
+		auto z = pooling.permute(after).avg_pooling(2);
+		z.avg_upsampling(pooling.permute(after), 2).permute(before).print();
+
+		//pooling.permute(after).rotate180().permute(before).print();
+
+		//cout << "filter.rotate180().permute(before);" << endl;
 		//filter.rotate180().permute(before).print();
 
 	
