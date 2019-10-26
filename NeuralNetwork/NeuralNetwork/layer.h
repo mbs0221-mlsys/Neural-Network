@@ -19,12 +19,10 @@ namespace layers {
 	public:
 		string name;
 		Shape shape;
-		Tensor<T> value;
 		Layer<T> *input;
 		Layer() : input(nullptr) {  }
 		Layer(Layer<T> *input) { setInput(input); }
 		Shape getShape() { return shape; }
-		virtual Tensor<T> getValue() { return value; }
 		virtual void setInput(Layer<T> *input) {
 			this->input = input;
 		}
@@ -54,11 +52,33 @@ namespace layers {
 			this->shape = Shape(size);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			value = data;// 设置value为data，供后续节点使用
-			return value;// input节点不会有输入，所以直接返回x
+			return data;// input节点不会有输入，所以直接返回data
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
 			return delta;// input节点不会有输入，所以直接返回delta
+		}
+	};
+
+	template<class T>
+	class Conv3D :public Layer<T> {
+	private:
+		Tensor<T> filter;
+		int stride;
+	public:
+		Conv3D(int width=3, int stride=1, int n_filters=1): Layer<T>(){
+			Shape filter_shape(n_filters, width, width, 1);
+			filter = Tensor<T>(filter_shape);
+		}
+		virtual void setInput(Layer<T> *input) {
+			Layer<T>::setInput(input);
+			Shape input_shape = input->getShape();
+			Shape filter_shape = filter.getShape();
+			filter_shape.set(3, input_shape[3]);// n_channels
+			filter = Tensor<T>(filter_shape);
+		}
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Tensor<T> x = Layer<T>::forward(data);
+			return x.conv3d(filter, stride);
 		}
 	};
 
@@ -67,43 +87,36 @@ namespace layers {
 	template<class T>
 	class Pooling : public Layer<T> {
 	private:
+		Tensor<T> input_value;
 		POOLING type;
 		int size;
 	public:
-		Pooling(int size, POOLING type) : Layer<T>(), size(size), (type) { ; }
+		Pooling(int size, POOLING type=MAX_POOLING) : Layer<T>(), size(size), (type) { ; }
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			switch (type) {
-			case POOLING::MAX_POOLING:
-				value = data.max_pooling(size);
-				break;
-			case POOLING::MIN_POOLING:
-				value = data.min_pooling(size);
-				break;
-			case POOLING::AVG_POOLING:
-				value = data.avg_pooling(size);
-				break;
-			default:// average pooling by default
-				value = data.avg_pooling(size);
-				break;
-			}
-			return value;
+			// average pooling by default
+			input_value = Layer<T>::forward(data);			
+			if (type == POOLING::MAX_POOLING)
+				return input_value.max_pooling(size);
+			else if (type == POOLING::MIN_POOLING)
+				return input_value.min_pooling(size);
+			else if (type == POOLING::AVG_POOLING)
+				return input_value.avg_pooling(size);
+			else
+				return input_value.avg_pooling(size);
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			Tensor<T> x = input->getValue();
-			switch (type) {
-			case POOLING::MAX_POOLING:
-				return Layer<T>::backward(delta.max_sampling(x, size));
-			case POOLING::MIN_POOLING:
-				return Layer<T>::backward(delta.min_upsampling(x, size));
-			case POOLING::AVG_POOLING:
-				return Layer<T>::backward(delta.avg_upsampling(size));
-			default:
-				return Layer<T>::backward(delta.avg_upsampling(size));
-				break;
-			}
+			// average upsampling by default
+			if (type == POOLING::MAX_POOLING)
+				return Layer<T>::backward(delta.max_upsampling(input_value, size));
+			else if (type == POOLING::MIN_POOLING)
+				return Layer<T>::backward(delta.min_upsampling(input_value, size));
+			else if (type == POOLING::AVG_POOLING)
+				return Layer<T>::backward(delta.avg_upsampling(input_value, size));
+			else
+				return Layer<T>::backward(delta.avg_upsampling(input_value, size));
 		}
 	};
 
@@ -130,7 +143,7 @@ namespace layers {
 	template<class T>
 	class Linear : public Layer<T> {
 	private:
-		Tensor<T> w, b;
+		Tensor<T> x, w, b;
 		Tensor<T> grad_w, grad_b;
 	public:
 		Linear(int n_output) : Layer<T>() {
@@ -145,13 +158,12 @@ namespace layers {
 			b = Tensor<T>(1, 1, 1, shape[3]);// (1,1,1,col)
 		}
 		virtual Tensor<T> forward(Tensor<T> data) {
-			Tensor<T> x = Layer<T>::forward(data);
+			x = Layer<T>::forward(data);
 			value = x.matmul(w) + b;// TODO: matrix+vector
 			return value;
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			Tensor<T> in = input->getValue();
-			grad_w = in.Transpose().matmul(delta);
+			grad_w = x.Transpose().matmul(delta);
 			grad_b = delta.reduce_sum(0);
 			return Layer<T>::backward(delta.matmul(w.Transpose()));
 		}
@@ -200,17 +212,19 @@ namespace layers {
 	template<class T>
 	class Loss : Layer<T> {
 	private:
-		Tensor<T> y;
+		Tensor<T> y, m_delta;
 	public:
 		Loss(Layer<T> *input, Tensor<T> y) :Layer<T>(input), y(y) { ; }
-		double getLossValue() { return value.data[0][0]; }
+		double getLossValue() {
+			return value.data[0][0];
+		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
 			Tensor<T> x = Layer<T>::forward(data);
 			value = ops::mse(x, y);
+			m_delta = x - y;
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			Tensor<T> x = input->getValue();
-			return input->backward(x - y);
+			return Layer<T>::backward(m_delta);
 		}
 	};
 }

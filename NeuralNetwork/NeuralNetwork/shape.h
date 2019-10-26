@@ -28,6 +28,12 @@ namespace shape {
 			dims[2] = size[2];
 			dims[3] = size[3];
 		}
+		Shape(int i, int j, int k, int l) {
+			dims[0] = i;
+			dims[1] = j;
+			dims[2] = k;
+			dims[3] = l;
+		}
 		void print() {
 			printf_s("Shape(%d, %d, %d, %d)\n", dims[0], dims[1], dims[2], dims[3]);
 		}

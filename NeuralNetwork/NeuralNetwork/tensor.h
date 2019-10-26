@@ -563,7 +563,7 @@ namespace tensor {
 		Tensor<T> min_upsampling(Tensor<T> &input, int size) {
 			__upsampling_(input, size, [](T a, T b)->bool {return a < b; });
 		}
-		Tensor<T> avg_upsampling(int size) {
+		Tensor<T> avg_upsampling(Tensor<T> &input, int size) {
 			// calculate area
 			int area = size*size;
 			// calculate 2d up_sampling (AVG)
