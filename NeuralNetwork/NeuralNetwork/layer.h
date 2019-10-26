@@ -13,18 +13,24 @@ namespace layers {
 	using namespace std;
 	using namespace tensor;
 	using namespace ops;
+	
+	//----------------------------------------ABSTRACT LAYER DEFINATION-------
 
 	template<class T>
 	class Layer {
-	public:
+	private:
 		string name;
 		Shape shape;
 		Layer<T> *input;
+	public:
 		Layer() : input(nullptr) {  }
 		Layer(Layer<T> *input) { setInput(input); }
 		Shape getShape() { return shape; }
 		virtual void setInput(Layer<T> *input) {
 			this->input = input;
+		}
+		virtual Layer<T>* getInput() {
+			return input;
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
 			if (input != nullptr)
@@ -40,6 +46,7 @@ namespace layers {
 		}
 		virtual void update() { ; }
 	};
+	//----------------------------------------INPUT LAYER---------------------
 
 	template<class T>
 	class Input : public Layer<T> {
@@ -59,13 +66,47 @@ namespace layers {
 		}
 	};
 
+	// activation layer
 	template<class T>
-	class Conv3D :public Layer<T> {
+	class Activation {
+	private:
+		Tensor<T> grad;
+		string activation;
+	public:
+		Activation(string activation) : activation(activation) { ; }
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			if (activation == "sigmoid") {
+				Tensor<T> value = data.sigmoid();
+				grad = ops::grad_sigmoid(value);
+				return value;
+			} else if (activation == "relu") {
+				Tensor<T> value = data.relu();
+				grad = ops::grad_relu(data);
+				return value;
+			} else if (activation == "leaky_relu") {
+				value = x.relu(x, max_value, threshold, negative_slope);
+				grad = ops::grad_relu(x, max_value, threshold, negative_slop);
+			} else {
+				throw(std::exception());
+			}
+
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return delta * grad;
+		}
+	};
+
+	//----------------------------------------CONVOLUTION LAYER---------------
+
+	template<class T>
+	class Convolution : public Layer<T> {
 	private:
 		Tensor<T> filter;
 		int stride;
+		string activation;
 	public:
-		Conv3D(int width=3, int stride=1, int n_filters=1): Layer<T>(){
+		Convolution(int width = 3, int stride = 1, int n_filters = 1, string activation = "sigmoid") 
+			: Layer<T>(), activation(activation) {
 			Shape filter_shape(n_filters, width, width, 1);
 			filter = Tensor<T>(filter_shape);
 		}
@@ -76,50 +117,105 @@ namespace layers {
 			filter_shape.set(3, input_shape[3]);// n_channels
 			filter = Tensor<T>(filter_shape);
 		}
+	};
+
+	template<class T>
+	class Conv2D : public Convolution<T> {
+	public:
+		Conv2D(int width = 3, int stride = 1, int n_filters = 1, string activation = "sigmoid")
+			: Convolution<T>(width, stride, n_filters, activation) {
+		}
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Tensor<T> x = Layer<T>::forward(data);
+			return x.conv2d(filter, stride);
+		}
+	};
+
+	template<class T>
+	class Conv3D : public Convolution<T> {
+	private:
+		Tensor<T> filter;
+		int stride;
+		string activation;
+	public:
+		Conv3D(int width=3, int stride=1, int n_filters=1, string activation="sigmoid")
+			: Convolution<T>(width, stride, n_filters, activation) {
+			Shape filter_shape(n_filters, width, width, 1);
+			filter = Tensor<T>(filter_shape);
+		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
 			Tensor<T> x = Layer<T>::forward(data);
 			return x.conv3d(filter, stride);
 		}
 	};
 
-	enum POOLING { MAX_POOLING, MIN_POOLING, AVG_POOLING };
-
+	//----------------------------------------POOLING LAYER-------------------
 	template<class T>
 	class Pooling : public Layer<T> {
-	private:
-		Tensor<T> input_value;
-		POOLING type;
-		int size;
+	protected:
+		string activation;
+		int width;
 	public:
-		Pooling(int size, POOLING type=MAX_POOLING) : Layer<T>(), size(size), (type) { ; }
+		Pooling(int size, string activation = "sigmoid")
+			: Layer<T>(), activation(activation), width(width) { ; }
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			// average pooling by default
-			input_value = Layer<T>::forward(data);			
-			if (type == POOLING::MAX_POOLING)
-				return input_value.max_pooling(size);
-			else if (type == POOLING::MIN_POOLING)
-				return input_value.min_pooling(size);
-			else if (type == POOLING::AVG_POOLING)
-				return input_value.avg_pooling(size);
-			else
-				return input_value.avg_pooling(size);
+			return Layer<T>::forward(data);
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			// average upsampling by default
-			if (type == POOLING::MAX_POOLING)
-				return Layer<T>::backward(delta.max_upsampling(input_value, size));
-			else if (type == POOLING::MIN_POOLING)
-				return Layer<T>::backward(delta.min_upsampling(input_value, size));
-			else if (type == POOLING::AVG_POOLING)
-				return Layer<T>::backward(delta.avg_upsampling(input_value, size));
-			else
-				return Layer<T>::backward(delta.avg_upsampling(input_value, size));
+			return Layer<T>::backward(delta);
 		}
 	};
 
+	template<class T>
+	class MaxPooling : protected Pooling<T> {
+	private:
+		Tensor<T> input_value;
+	public:
+		MaxPooling(int width, string activation = "sigmoid")
+			: Pooling<T>(width, activation) { ; }
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			input_value = Pooling<T>::forward(data);
+			return input_value.max_pooling(size);
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return Pooling<T>::backward(delta.max_upsampling(input_value, width));
+		}
+	};
+
+	template<class T>
+	class MinPooling : protected Pooling<T> {
+	private:
+		Tensor<T> input_value;
+	public:
+		MinPooling(int width, string activation = "sigmoid")
+			: Pooling<T>(width, activation) { ; }
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			input_value = Pooling<T>::forward(data);
+			return input_value.min_pooling(width);
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return Pooling<T>::backward(delta.min_upsampling(input_value, width));
+		}
+	};
+
+	template<class T>
+	class AvgPooling : protected Pooling<T> {
+	public:
+		AvgPooling(int width, string activation = "sigmoid")
+			: Pooling<T>(width, activation) { ; }
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			Pooling<T>::forward(data);
+			return input_value.avg_pooling(width);
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return Pooling<T>::backward(delta.avg_upsampling(width));
+		}
+	};
+
+	//----------------------------------------FLATTEN LAYER-------------------
 	template<class T>
 	class Flatten : public Layer<T> {
 	private:
@@ -141,26 +237,24 @@ namespace layers {
 	};
 
 	template<class T>
-	class Linear : public Layer<T> {
+	class FullConnected : public Layer<T>, Activation<T> {
 	private:
 		Tensor<T> x, w, b;
 		Tensor<T> grad_w, grad_b;
 	public:
-		Linear(int n_output) : Layer<T>() {
+		FullConnected(int n_output) : Layer<T>() {
 			shape.setDims(n_output, 3);
 		}
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
 			Shape input_shape = input->getShape();
 			shape.set(NULL, NULL, input_shape[3], shape[3]);
-			// output_shape
-			w = Tensor<T>(1, 1, input_shape[3], shape[3]);// (1,1,row,col)
-			b = Tensor<T>(1, 1, 1, shape[3]);// (1,1,1,col)
+			w = Tensor<T>(1, 1, input_shape[3], shape[3]);
+			b = Tensor<T>(1, 1, 1, shape[3]);
 		}
 		virtual Tensor<T> forward(Tensor<T> data) {
 			x = Layer<T>::forward(data);
-			value = x.matmul(w) + b;// TODO: matrix+vector
-			return value;
+			return x.matmul(w) + b;// TODO: matrix+vector
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
 			grad_w = x.Transpose().matmul(delta);
@@ -171,41 +265,6 @@ namespace layers {
 			Layer<T>::update();
 			w = w - 0.01*grad_w;
 			b = b - 0.01*grad_b;
-		}
-	};
-
-	template<class T>
-	class FullConnected : public Linear<T> {
-	private:
-		Tensor<T> grad;
-		string activation;
-	public:
-		FullConnected(int n_output, string activation) : Linear<T>(n_output), activation(activation) { ; }
-		virtual void setInput(Layer<T> *input) {
-			Linear<T>::setInput(input);
-		}
-		virtual Tensor<T> forward(Tensor<T> &data) {
-			Tensor<T> x = Linear<T>::forward(data);
-			if (activation == "sigmoid") {
-				value = x.sigmoid();
-				grad = ops::grad_sigmoid(value);
-			}
-			if (activation == "relu") {
-				value = x.relu();
-				grad = ops::grad_relu(x);
-			}
-			//if (activation == "leaky_relu") {
-			//	value = x.relu(x, max_value, threshold, negative_slope);
-			//	grad = ops::grad_relu(x, max_value, threshold, negative_slop);
-			//}
-			return value;
-
-		}
-		virtual Tensor<T> backward(Tensor<T> &delta) {
-			return Linear<T>::backward(delta * grad);
-		}
-		virtual void update() {
-			Linear<T>::update();
 		}
 	};
 

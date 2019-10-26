@@ -557,23 +557,24 @@ namespace tensor {
 		}
 
 		// upsampling
-		Tensor<T> max_upsampling(Tensor<T> &input, int size) {
-			__upsampling_(input, size, [](T a, T b)->bool {return a > b; });
+		Tensor<T> max_upsampling(Tensor<T> &input, int width) {
+			__upsampling_(input, width, [](T a, T b)->bool {return a > b; });
 		}
-		Tensor<T> min_upsampling(Tensor<T> &input, int size) {
-			__upsampling_(input, size, [](T a, T b)->bool {return a < b; });
+		Tensor<T> min_upsampling(Tensor<T> &input, int width) {
+			__upsampling_(input, width, [](T a, T b)->bool {return a < b; });
 		}
-		Tensor<T> avg_upsampling(Tensor<T> &input, int size) {
-			// calculate area
-			int area = size*size;
+		Tensor<T> avg_upsampling(int width) {
+			// calculate area and shape
+			int area = width*width;
+			Shape output_shape(shape[0], shape[1]*width, shape[2]*width, shape[3]);
 			// calculate 2d up_sampling (AVG)
-			Tensor<T> out = Tensor<T>::zeros(input.getShape());
+			Tensor<T> out = Tensor<T>::zeros(output_shape);
 			foreach([&](int oi, int oj, int ok, int ol) {
 				// average upsampling
 				T value = this->at(oi, oj, ok, ol) / area;
-				for (int j = 0; j < size; j++) {
-					for (int k = 0; k < size; k++) {
-						out.set(value, oi, oj*size + j, ok*size + k, ol);
+				for (int j = 0; j < width; j++) {
+					for (int k = 0; k < width; k++) {
+						out.set(value, oi, oj*width + j, ok*width + k, ol);
 					}
 				}
 			});

@@ -211,11 +211,11 @@ namespace model {
 
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
+			layers.push_back(new MaxPooling<T>(2));
+			layers.push_back(new MinPooling<T>(2));
+			layers.push_back(new AvgPooling<T>(2));
 			layers.push_back(new Flatten<T>());
 			layers.push_back(new FullConnected<T>(11, "sigmoid"));
-			layers.push_back(new FullConnected<T>(9, "sigmoid"));
-			layers.push_back(new FullConnected<T>(7, "sigmoid"));
-			layers.push_back(new FullConnected<T>(5, "sigmoid"));
 			layers.push_back(new FullConnected<T>(3, "sigmoid"));
 			
 			return new Model<T>(layers);
