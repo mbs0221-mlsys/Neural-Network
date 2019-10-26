@@ -144,6 +144,7 @@
     <Text Include="Text.txt" />
     <Text Include="mat.txt" />
     <Text Include="filter.txt" />
+    <Text Include="pooling.txt" />
     <Text Include="x_test.txt" />
     <Text Include="x_train.txt" />
     <Text Include="y_pred.txt" />

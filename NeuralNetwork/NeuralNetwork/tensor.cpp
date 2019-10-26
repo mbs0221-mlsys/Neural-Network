@@ -7,7 +7,6 @@ using namespace tensor;
 template class Tensor<double>;
 template void tensor::test<double>();
 
-
 template<class T>
 void tensor::test() {
 
@@ -30,41 +29,33 @@ void tensor::test() {
 	}
 
 	{
-		Tensor<T> mat, filter;
+		Tensor<T> mat, filter, pooling;
 		mat.load("mat.txt");
 		filter.load("filter.txt");
+		pooling.load("pooling.txt");
 
-		cout << "mat.print();" << endl;
+		int after[] = { 0, 2, 3, 1 };
+		int before[] = { 0, 3, 1, 2 };
+
+		cout << "mat.permute(order).padding(1);" << endl;
+		mat.permute(after).padding(1).permute(before).print();
+		
+		filter.print();
+		filter = filter.permute(after);
+		cout << "mat.permute(after).padding(1).conv3d(filter, 2).permute(before);" << endl;
+		mat = mat.permute(after).padding(1).conv3d(filter, 2).permute(before);
 		mat.print();
-		cout << "filter.print();" << endl;
-		filter.print();
 
-		cout << "x_train.padding(1).print();" << endl;
-		mat.padding(1).print();
+		pooling.print();
+		cout << "pooling.max_pooing();" << endl;
+		pooling.permute(after).max_pooling(2).permute(before).print();
+		pooling.permute(after).min_pooling(2).permute(before).print();
+		pooling.permute(after).avg_pooling(2).permute(before).print();
 
-		//cout << "ones.conv2d(filter, 1).print();" << endl;
+		cout << "filter.rotate180().permute(before);" << endl;
+		//filter.rotate180().permute(before).print();
 
-
-		int order[] = { 0, 2, 3, 1 };
-		filter = filter.permute(order);
-		cout << "filter.permute(order);" << endl;
-		filter.print();
-
-		int order1[] = { 0, 3, 1, 2 };
-		mat.permute(order).padding(1).permute(order1).print();
-
-		mat.permute(order).padding(1).conv3d(filter, 2).permute(order1).print();
-		//mat.padding(1).conv3d(filter, 2).permute(order1).print();
-		//mat.print();
-
-		int after[] = { 1, 1, 1, 75 };
-		int before[] = { 1, 3, 5, 5 };
-
-		cout << "mat.reshape(after).reshape(before).print();" << endl;
-		mat.reshape(after).reshape(before).print();
-
-		cout << "mat.flatten().reshape(before).print();" << endl;
-		mat.flatten().reshape(before).print();
+	
 		getchar();
 	}
 }

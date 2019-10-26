@@ -73,7 +73,7 @@ namespace tensor {
 
 	using namespace std;
 	using namespace shape;
-
+	
 	// Tensor definition
 	template<class T>
 	class Tensor {
@@ -95,6 +95,7 @@ namespace tensor {
 				cerr << e.what() << endl;
 			}
 		}
+
 	protected:
 
 		//template<class K>
@@ -142,6 +143,28 @@ namespace tensor {
 			Tensor<T> out(shape);
 			out.foreach_elem_assign([&](int i) {
 				return func(data[i]);
+			});
+			return out;
+		}
+		
+		// pooling
+		Tensor<T> __pooling_(int size, T (*func)(T, T)) {
+			// calculate shape
+			Shape output_shape = shape;
+			int width = shape[1] / size;
+			int height = shape[2] / size;
+			output_shape.set(shape[0], width, height, shape[3]);
+			// calculate 2d pooling (MAX, MIN)
+			Tensor<T> out = Tensor<T>::zeros(output_shape);
+			out.foreach_assign([&](int oi, int oj, int ok, int ol) {
+				T value = this->at(oi, oj*size, ok*size, ol);
+				for (int j = 0; j < size; j++) {
+					for (int k = 0; k < size; k++) {
+						T curr = this->at(oi, oj*size + j, ok*size + k, ol);
+						value = func(value, curr);
+					}
+				}
+				return value;
 			});
 			return out;
 		}
@@ -363,6 +386,25 @@ namespace tensor {
 			return __foreach_assign_(x, [](T a, T b) { return a / b; });
 		}
 
+		T find_min() {
+			T value = data[0];
+			foreach_elem([&](int i) {
+				if (data[i] < value) {
+					value = data[i];
+				}
+			});
+			return value;
+		}
+		T find_max() {
+			T value = data[0];
+			foreach_elem([&](int i) {
+				if (data[i] > value) {
+					value = data[i];
+				}
+			});
+			return value;
+		}
+
 		// operator ()
 		inline void set(T t, int i) {
 			data[i] = t;
@@ -408,7 +450,19 @@ namespace tensor {
 			return data[idx];
 		}
 		
-		// tensor operation
+		// rotate operation
+		Tensor<T> rotate180() {
+			int size[] = { shape[0], shape[2], shape[1], shape[3] };
+			Tensor<T> out = Tensor<T>::zeros(Shape(size));
+			// rotate by (f,:,:,c)
+			foreach([&](int ii, int ij, int ik, int il) {
+				T value = this->at(ii, shape[2] - ik - 1, shape[1] - ij - 1, il);
+				out.set(value, ii, ij, ik, il);
+			});
+			return out;
+		}
+		
+		// padding operation
 		Tensor<T> padding(int pad) {
 			int size[] = { shape[0], shape[1] + pad*2, shape[2] + pad*2, shape[3] };
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
@@ -419,6 +473,8 @@ namespace tensor {
 			});
 			return out;
 		}
+		
+		// convolution operation
 		Tensor<T> conv2d(Tensor<T> filter, int stride) {
 			// calculate output shape
 			Shape filter_shape = filter.getShape();// (1, width, height, channel)
@@ -427,52 +483,56 @@ namespace tensor {
 			int channel = filter_shape[0];// number of filters
 			int size[] = { shape[0], width, height, channel };
 			// calculate 2d concolution
-			T *value = new T[channel];
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
-			out.foreach_assign([&](int oi, int oj, int ok, int ol) {
+			out.foreach([&](int oi, int oj, int ok, int ol) {
 				if (ol == 0) {
-					memset(value, 0.0f, sizeof(T)*channel);
-					// calculate for all filters (filter, width, height, channel)
+					// (:,:,:,kc)*(1,:,:,kc)
 					filter.foreach([&](int ki, int kj, int kk, int kl) {
-						// for each filter (:, width, height, channel)
-						T a = this->at(oi, oj*stride + kj, ok*stride + kk, kl);
-						T b = filter.at(ki, kj, kk, kl);
+						T a = this->at(oi, oj*stride + kj, ok*stride + kk, kl);		// original image
+						T b = filter.at(ki, kj, kk, kl);							// filter
+						T o = out.at(oi, oj, ok, kl);								// accumulate
+						out.set((o + a*b), oi, oj, ok, kl); // for each channel
 					});
 				}
-				// save each result from each filter (frame, width, height, channel)
-				return value[ol];//	out.set(value[ol], oi, oj, ok, ol);
 			});
-			delete[] value;
 			return out;
 		}
 		Tensor<T> conv3d(Tensor<T> filter, int stride) {
-			// calculate output shape
-			Shape filter_shape = filter.getShape();// (1, width, height, channel)
-			int width = (shape[1] - filter_shape[1]) / stride + 1;// new height
-			int height = (shape[2] - filter_shape[2]) / stride + 1;// new height
-			int channel = filter_shape[0];// number of filters
-			int size[] = { shape[0], width, height, channel };
+			// calculate shape
+			Shape filter_shape = filter.getShape();
+			int width = (shape[1] - filter_shape[1]) / stride + 1;
+			int height = (shape[2] - filter_shape[2]) / stride + 1;
+			int channel = filter_shape[0];
+			Shape output_shape = shape;
+			output_shape.set(shape[0], width, height, channel);
 			// calculate 3d concolution
-			T *value = new T[channel];			
-			Tensor<T> out = Tensor<T>::zeros(Shape(size));
-			out.foreach_assign([&](int oi, int oj, int ok, int ol) {
+			Tensor<T> out = Tensor<T>::zeros(output_shape);
+			out.foreach([&](int oi, int oj, int ok, int ol) {
 				if (ol ==  0) {
-					memset(value, 0.0f, sizeof(T)*channel);
-					// calculate for all filters (filter, width, height, channel)
+					// (:,:,:,ic)*(nk,:,:,ic)
 					filter.foreach([&](int ki, int kj, int kk, int kl) {
-						// for each filter (:, width, height, channel)
-						T a = this->at(oi, oj*stride + kj, ok*stride + kk, kl);
-						T b = filter.at(ki, kj, kk, kl);						
-						value[ki] = value[ki] + a*b;
+						T a = this->at(oi, oj*stride + kj, ok*stride + kk, kl);		// original image
+						T b = filter.at(ki, kj, kk, kl);							// filter
+						T o = out.at(oi, oj, ok, ki);								// accumulate
+						out.set((o + a*b), oi, oj, ok, ki);
 					});
 				}
-				// save each result from each filter (frame, width, height, channel)
-				return value[ol];//	out.set(value[ol], oi, oj, ok, ol);
 			});
-			delete[] value;
 			return out;
 		}
-
+		
+		// pooling operation
+		Tensor<T> max_pooling(int size) {
+			return __pooling_(size, [](T a, T b)->T { return ((a > b) ? (a) : (b)); });
+		}
+		Tensor<T> min_pooling(int size) {
+			return __pooling_(size, [](T a, T b)->T { return ((a < b) ? (a) : (b)); });
+		}
+		Tensor<T> avg_pooling(int size) {
+			Tensor<T> out = __pooling_(size, [](T a, T b)->T { return a + b; });
+			return out / (size*size);
+		}
+		
 		// math function
 		Tensor<T> softmax() { 
 			Tensor<T> sum_e = exp().reduce_sum(1); 
@@ -509,7 +569,7 @@ namespace tensor {
 		}
 		Tensor<T> hinge(T t) {
 			return __foreach_elem_assign_([=](T x) {
-				int y = 1 - t * x;
+				T y = 1 - t * x;
 				return ((y > 0) ? y : 0);
 			});
 		}
@@ -579,7 +639,7 @@ namespace tensor {
 		
 		void print() {
 			shape.print();
-			foreach([&](int i, int j, int k, int l) {
+			foreach([&](int i, int j, int k, int l){
 				T value = this->at(i, j, k, l);
 				if (k == 0 && l == 0) {
 					printf("Tensor (%d, %d, :, :)\n", i, j);

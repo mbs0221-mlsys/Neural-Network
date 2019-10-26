@@ -79,6 +79,9 @@
     <Text Include="filter.txt">
       <Filter>资源文件</Filter>
     </Text>
+    <Text Include="pooling.txt">
+      <Filter>资源文件</Filter>
+    </Text>
   </ItemGroup>
   <ItemGroup>
     <Image Include="timg.jpg">

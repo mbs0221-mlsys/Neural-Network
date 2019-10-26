@@ -74,8 +74,7 @@ namespace layers {
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
 			Shape input_shape = input->getShape();
-			int size[] = { NULL, NULL, input_shape[3], shape[3] };
-			shape = Shape(size);
+			shape.set(NULL, NULL, input_shape[3], shape[3]);
 			// output_shape
 			w = Tensor<T>(1, 1, input_shape[3], shape[3]);// (1,1,row,col)
 			b = Tensor<T>(1, 1, 1, shape[3]);// (1,1,1,col)

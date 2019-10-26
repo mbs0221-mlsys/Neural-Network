@@ -102,7 +102,7 @@ namespace model {
 			}
 			void fit(Tensor<T> &x_train, Tensor<T> &y_train) {
 				printf_s("fit()\n");
-				y_train.savemat("y_train-one_hot.txt");
+				y_train.save("y_train-one_hot.txt");
 				Shape shape = y_train.shape();
 				int num_samples = shape[0];
 				double last = INFINITE;
