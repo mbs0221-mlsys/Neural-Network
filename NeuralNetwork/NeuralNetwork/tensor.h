@@ -8,6 +8,7 @@
 #include <time.h>
 #include <math.h>
 #include <string>
+#include <functional>
 
 #include <set>
 #include <iostream>
@@ -72,7 +73,7 @@ inline T __relu_grad_(T x, double max_value, double threshold, double negative_s
 namespace tensor {
 
 	using namespace std;
-	using namespace shape;
+	using namespace shape::oldshape;
 	
 	// Tensor definition
 	template<class T>
@@ -90,7 +91,8 @@ namespace tensor {
 		}
 		inline void __allocate_() {
 			try {
-				data = new T[length()];
+				int len = length();
+				data = new T[len];
 			} catch (const bad_alloc & e){
 				cerr << e.what() << endl;
 			}
@@ -103,43 +105,48 @@ namespace tensor {
 			Shape m_shape = tensor.getShape();
 			Tensor<T> out(m_shape);
 			int axis = -1;
-			for (int i = 0; i < 4; i++) {
+			for (int i = 0; i < 5; i++) {
 				if (shape[i] != m_shape[i]) {
 					axis = i;
 					break;
 				}
 			}
 			switch (axis) {
-			case 0: // foreach frame
-				out.foreach_assign([&](int f, int i, int j, int c) {
-					return func(this->at(f, i, j, c), tensor.at(0, i, j, c));
+			case 0: // foreach sample
+				out.foreach_assign([&](int s, int f, int i, int j, int c) {
+					return func(this->at(s, f, i, j, c), tensor.at(0, f, i, j, c));
 				});
 				break;
-			case 1: // foreach column
-				out.foreach_assign([&](int f, int i, int j, int c) {
-					return func(this->at(f, i, j, c), tensor.at(f, 0, j, c));
+			case 1: // foreach frame
+				out.foreach_assign([&](int s, int f, int i, int j, int c) {
+					return func(this->at(s, f, i, j, c), tensor.at(s, 0, i, j, c));
 				});
 				break;
-			case 2: // foreach row
-				out.foreach_assign([&](int f, int i, int j, int c) {
-					return func(this->at(f, i, j, c), tensor.at(f, i, 0, c));
+			case 2: // foreach column
+				out.foreach_assign([&](int s, int f, int i, int j, int c) {
+					return func(this->at(s, f, i, j, c), tensor.at(s, f, 0, j, c));
 				});
 				break;
-			case 3: // foreach channel
-				out.foreach_assign([&](int f, int i, int j, int c) {
-					return func(this->at(f, i, j, c), tensor.at(f, i, j, 0));
+			case 3: // foreach row
+				out.foreach_assign([&](int s, int f, int i, int j, int c) {
+					return func(this->at(s, f, i, j, c), tensor.at(s, f, i, 0, c));
+				});
+				break;
+			case 4: // foreach channel
+				out.foreach_assign([&](int s, int f, int i, int j, int c) {
+					return func(this->at(s, f, i, j, c), tensor.at(s, f, i, j, 0));
 				});
 				break;
 			default: // foreach element
-				out.foreach_assign([&](int f, int i, int j, int c) {
-					return func(this->at(f, i, j, c), tensor.at(f, i, j, c));
+				out.foreach_assign([&](int s, int f, int i, int j, int c) {
+					return func(this->at(s, f, i, j, c), tensor.at(s, f, i, j, c));
 				});
 				break;
 			}
 			return out;
 		}
-		template<class K>
-		Tensor<T> __foreach_elem_assign_(K func) {
+		template<class Type>
+		Tensor<T> __foreach_elem_assign_(Type func) {
 			Tensor<T> out(shape);
 			out.foreach_elem_assign([&](int i) {
 				return func(data[i]);
@@ -148,20 +155,20 @@ namespace tensor {
 		}
 
 		// pooling/upsampling
-		inline Tensor<T> __pooling_(int size, T (*func)(T, T)) {
-			// calculate shape
-			Shape output_shape = shape;
-			int width = shape[1] / size;
-			int height = shape[2] / size;
-			output_shape.set(shape[0], width, height, shape[3]);
-			// calculate 2d pooling (MAX, MIN, AVG)
-			Tensor<T> out = Tensor<T>::zeros(output_shape);
-			out.foreach_assign([&](int oi, int oj, int ok, int ol) {
+		inline Tensor<T> __pooling_(int width, T (*func)(T, T)) {
+			// 2d pooling (MAX, MIN, AVG)
+			int size[] = {
+				shape[0], shape[1],
+				shape[2] / width, shape[3] / width,
+				shape[4]
+			};
+			Tensor<T> out = Tensor<T>::zeros(Shape(size));
+			out.foreach_assign([&](int oi, int oj, int ok, int ol, int om) {
 				// find (MAX, MIN) in input region (oj, ok)
-				T value = this->at(oi, oj*size, ok*size, ol);
-				for (int j = 0; j < size; j++) {
-					for (int k = 0; k < size; k++) {
-						T curr = this->at(oi, oj*size + j, ok*size + k, ol);
+				T value = this->at(oi, oj, ok*width, ol*width, om);
+				for (int pk = 0; pk < width; pk++) {
+					for (int pl = 0; pl < width; pl++) {
+						T curr = this->at(oi, oj, ok*width + pk, ol*width + pl, om);
 						value = func(value, curr);
 					}
 				}
@@ -169,24 +176,24 @@ namespace tensor {
 			});
 			return out;
 		}
-		inline Tensor<T> __upsampling_(Tensor<T> &input, int size, bool(*comp)(T, T)) {
-			// calculate 2d up_sampling (MAX, MIN)
+		inline Tensor<T> __upsampling_(Tensor<T> &input, int width, bool(*comp)(T, T)) {
+			// 2d up_sampling (MAX, MIN) ref: https://www.cnblogs.com/pinard/p/6494810.html#!comments
 			Tensor<T> out = Tensor<T>::zeros(input.getShape());
-			foreach([&](int oi, int oj, int ok, int ol) {
-				T value = this->at(oi, oj, ok, ol);
+			foreach([&](int oi, int oj, int ok, int ol, int om) {
+				T value = this->at(oi, oj, ok, ol, om);
 				// find the position of value (MAX, MIN) in input
-				int pj, pk;
-				pj = pk = 0;
-				for (int j = 0; j < size; j++) {
-					for (int k = 0; k < size; k++) {
-						T curr = input.at(oi, oj*size + j, ok*size + k, ol);
+				int pk, pl;
+				pk = pl = 0;
+				for (int k = 0; k < width; k++) {
+					for (int l = 0; l < width; l++) {
+						T curr = input.at(oi, oj, ok*width + k, ol*width + l, om);
 						if (comp(value, curr)) {
-							pj = j, pk = k;
+							pk = k, pl = l;
 						}
 					}
 				}
 				// assign corresponding value
-				out.set(value, oi, oj*size + pj, ok*size + pk, ol);
+				out.set(value, oi, oj, ok*width + pk, ol*width + pl, om);
 			});
 			return out;
 		}
@@ -197,8 +204,8 @@ namespace tensor {
 		Tensor() {
 			data = nullptr;
 		}
-		Tensor(int f, int w, int h, int c) {
-			int size[] = { f, w, h, c };
+		Tensor(int f, int w, int h, int c, int m) {
+			int size[] = { f, w, h, c, m };// 1 samples by default
 			shape = Shape(size);
 			__allocate_();
 		}
@@ -206,13 +213,13 @@ namespace tensor {
 			shape = Shape(size);
 			__allocate_();
 		}
-		Tensor(Shape shape) : shape(shape) {
+		Tensor(Shape &shape) : shape(shape) {
 			__allocate_();
 		}
 		Tensor(Tensor<T> &tensor) : shape(tensor.getShape()) {
 			__allocate_();
-			foreach_assign([&](int i, int j, int k, int l) {
-				return tensor.at(i, j, k, l);
+			foreach_assign([&](int n, int f, int w, int h, int c) {
+				return tensor.at(n, f, w, h, c);
 			});
 		}
 		~Tensor() {
@@ -225,59 +232,56 @@ namespace tensor {
 		int length() { return shape.size(); }
 
 		// non-parallel foreach
-		template<class K>
-		void foreach(K func) {
-			// non-parallel	 
-			for (int i = 0; i < shape[0]; i++) {// frame
-				for (int j = 0; j < shape[1]; j++) {// column(width)
-					for (int k = 0; k < shape[2]; k++) {// row(height)
-						for (int l = 0; l < shape[3]; l++) {// depth(channel)
-							func(i, j, k, l);
+		void foreach(function<void(int,int,int,int,int)> func) {
+			for (int n = 0; n < shape[0]; n++) {// sample
+				for (int f = 0; f < shape[1]; f++) {// frame
+					for (int w = 0; w < shape[2]; w++) {// column(width)
+						for (int h = 0; h < shape[3]; h++) {// row(height)
+							for (int c = 0; c < shape[4]; c++) {// depth(channel)
+								func(n, f, w, h, c);
+							}
 						}
 					}
 				}
 			}
 		}
-		template<class K>
-		void foreach_assign(K func) {
-			// non-parallel
-			foreach([&](int i, int j, int k, int l) {
-				int idx = shape.sub2ind(i, j, k, l);
-				data[idx] = func(i, j, k, l);
+		void foreach_assign(function<T(int, int, int, int, int)> func) {
+			foreach([&](int i, int j, int k, int l, int m) {
+				int idx = shape.sub2ind(i, j, k, l, m);
+				data[idx] = func(i, j, k, l, m);
 			});
 		}
 		
 		// parallel foreach elem
-		template<class K>
-		void foreach_elem(K func) {
-			// parallel
-			for (int i = 0; i < length(); i++) {
+		template<typename Type>
+		void foreach_elem(Type func) {
+			int len = length();
+			for (int i = 0; i < len; i++) {
 				func(i);
 			}
 		}
-		template<class K>
-		void foreach_elem_assign(K func) {
-			// parallel
-			for (int i = 0; i < length(); i++) {
+		template<typename Type>
+		void foreach_elem_assign(Type func) {
+			int len = length();
+			for (int i = 0; i < len; i++) {
 				data[i] = func(i);
 			}
 		}
 
 		// operators
 		Tensor<T> one_hot(int num) {
-			int size[] = { shape[0], shape[1], shape[2], num };// (:, :, row, col).
-			Shape shape(size);
+			Shape output_shape(shape[0], shape[1], shape[2], shape[3], num);
 			// one-hot编码
 			map<int, int> codes;
-			Tensor<T> out = Tensor<T>::zeros(shape);
-			out.foreach([&](int i, int j, int k, int l) {
-				int value = (int)(this->at(i, j, k, l));
+			Tensor<T> out = Tensor<T>::zeros(output_shape);
+			out.foreach([&](int i, int j, int k, int l, int m) {
+				int value = (int)(this->at(i, j, k, l, m));
 				// 维护一个one-hot映射表
 				if (codes.find(value) == codes.end()) {
 					codes[value] = codes.size();
 				}
 				// 查找对应编码
-				out.set(1.0f, i, j, k, codes[value]);
+				out.set(1.0f, i, j, k, l, codes[value]);
 			});
 			return out;
 		}
@@ -289,43 +293,44 @@ namespace tensor {
 		}
 		Tensor<T> matmul(Tensor<T> &tensor) {
 			Shape shape_b = tensor.getShape();
-			// calculate this(:,:,ok,col)*(0,0,col,ol)
-			int n_cols = shape[3];// n_cols = shape[3] = shape_b[2];
-			Tensor<T> out(shape[0], shape[1], shape[2], shape_b[3]);
-			out.foreach_assign([&](int oi, int oj, int ok, int ol) {
+			// calculate this(:,:,:,ok,col)*(1,1,1,col,ol)
+			int n_cols = shape[3];
+			Tensor<T> out(shape[0], shape[1], shape[2], shape[3], shape_b[4]);
+			out.foreach_assign([&](int oi, int oj, int ok, int ol, int om) {
 				T value = 0;
-				for (int col = 0; col < n_cols; col++) {
-					value += this->at(oi, oj, ok, col)*tensor.at(0, 0, col, ol);// broadcast
+				for (int k = 0; k < n_cols; k++) {
+					value += this->at(oi, oj, ok, ol, k)*tensor.at(0, 0, 0, k, om);// broadcast
 				}
 				return value;
 			});
 			return out;
 		}
 		Tensor<T> Transpose() {
-			int size[] = { shape[0], shape[1], shape[3], shape[2] };
-			Shape shape(size);
-			Tensor<T> out(shape);
-			out.foreach_assign([&](int i, int j, int k, int l) {
-				return this->at(i, j, l, k);
+			Shape output_shape(shape[0], shape[1], shape[2], shape[4], shape[3]);
+			output_shape.print();
+			Tensor<T> out(output_shape);
+			out.foreach_assign([&](int i, int j, int k, int l, int m) {
+				return this->at(i, j, k, m, l);
 			});
 			return out;
 		}
 		Tensor<T> permute(int order[]) {
-			// 计算维度(2 1 3 0)
-			int size[] = { 0, 0, 0, 0 };
-			for (int i = 0; i < 4; i++) {
+			// get new shape
+			int size[] = { 0, 0, 0, 0, 0 };
+			for (int i = 0; i < 5; i++) {
 				size[i] = shape[order[i]];
 			}
 			Shape shape_out(size);
 			Tensor<T> out = Tensor<T>::zeros(shape_out);
-			// 置换操作
-			out.foreach_assign([&](int i, int j, int k, int l) {
-				int subs[] = { 0, 0, 0, 0 };// subscripts
-				subs[order[0]] = i; // 2, i
-				subs[order[1]] = j; // 1, j
-				subs[order[2]] = k; // 3, k
-				subs[order[3]] = l; // 0, l
-				return this->at(subs[0], subs[1], subs[2], subs[3]);
+			// permute
+			out.foreach_assign([&](int i, int j, int k, int l, int m) {
+				int subs[] = { 0, 0, 0, 0, 0 };
+				subs[order[0]] = i;
+				subs[order[1]] = j;
+				subs[order[2]] = k;
+				subs[order[3]] = l;
+				subs[order[4]] = m;
+				return this->at(subs[0], subs[1], subs[2], subs[3], subs[4]);
 			});
 			return out;
 		}
@@ -335,8 +340,8 @@ namespace tensor {
 		}
 		Tensor<T> reshape(Shape &shape_out) {
 			Tensor<T> out = Tensor<T>::zeros(shape_out);
-			out.foreach_assign([&](int i, int j, int k, int l) {
-				int idx = shape_out.sub2ind(i, j, k, l);
+			out.foreach_assign([&](int i, int j, int k, int l, int m) {
+				int idx = shape_out.sub2ind(i, j, k, l, m);
 				return data[idx];
 			});
 			return out;
@@ -347,33 +352,38 @@ namespace tensor {
 			return reshape(shape_out.flatten(2));
 		}
 		Tensor<T> reduce_sum(int axis) {
-			// frame, width(column), height(row), channel. 
+			// sample, frame, width(column), height(row), channel. 
 			Shape shape_out = shape;
 			shape_out.set(1, axis);
 			Tensor<T> out = Tensor<T>::zeros(shape_out);
 			switch (axis) {
-			case 0:// frame
-				foreach([&](int i, int j, int k, int l) {
-					T value = out.at(0, j, k, l) + this->at(i, j, k, l);
-					out.set(value, 0, j, k, l);
+			case 0:// samples
+				foreach([&](int i, int j, int k, int l, int m) {
+					T value = out.at(0, j, k, l, m) + this->at(i, j, k, l, m);
+					out.set(value, 0, j, k, l, m);
+				});
+			case 1:// frame
+				foreach([&](int i, int j, int k, int l, int m) {
+					T value = out.at(i, 0, k, l, m) + this->at(i, j, k, l, m);
+					out.set(value, i, 0, k, l, m);
 				});
 				break;
-			case 1:// width
-				foreach([&](int i, int j, int k, int l) {
-					T value = out.at(i, 0, k, l) + this->at(i, j, k, l);
-					out.set(value, i, 0, k, l);
+			case 2:// width
+				foreach([&](int i, int j, int k, int l, int m) {
+					T value = out.at(i, j, 0, l, m) + this->at(i, j, k, l, m);
+					out.set(value, i, j, 0, l, m);
 				});
 				break;
-			case 2:// height
-				foreach([&](int i, int j, int k, int l) {
-					T value = out.at(i, j, 0, l) + this->at(i, j, k, l);
-					out.set(value, i, j, 0, l);
+			case 3:// height
+				foreach([&](int i, int j, int k, int l, int m) {
+					T value = out.at(i, j, k, 0, m) + this->at(i, j, k, l, m);
+					out.set(value, i, j, k, 0, m);
 				});
 				break;
-			case 3:// channel
-				foreach([&](int i, int j, int k, int l) {
-					T value = out.at(i, j, k, 0) + this->at(i, j, k, l);
-					out.set(value, i, j, k, 0);
+			case 4:// channel
+				foreach([&](int i, int j, int k, int l, int m) {
+					T value = out.at(i, j, k, l, 0) + this->at(i, j, k, l, m);
+					out.set(value, i, j, k, l, 0);
 				});
 				break;
 			default:
@@ -432,123 +442,149 @@ namespace tensor {
 		inline void set(T t, int i) {
 			data[i] = t;
 		}
-		inline void set(T t, int i, int j, int k, int l) {
-			int idx = shape.sub2ind(i, j, k, l);
-			data[idx] = t;
+		inline void set(T value, int i, int j, int k, int l, int m) {
+			int idx = shape.sub2ind(i, j, k, l, m);
+			data[idx] = value;
 		}
-		
+		inline void set(T value, int i, int j, int k, int l) {
+			int idx = shape.sub2ind(0, i, j, k, l);
+			data[idx] = value;
+		}
+		inline T at(int i, int j, int k, int l, int m) {
+			int idx = shape.sub2ind(i, j, k, l, m);
+			return data[idx];
+		}
 		inline T at(int i, int j, int k, int l) {
-			int idx = shape.sub2ind(i, j, k, l);
+			int idx = shape.sub2ind(0, i, j, k, l);
 			return data[idx];
 		}
 		inline T at(int j, int k, int l) {
-			int idx = shape.sub2ind(0, j, k, l);
+			int idx = shape.sub2ind(0, 0, j, k, l);
 			return data[idx];
 		}
 		inline T at(int k, int l) {
-			int idx = shape.sub2ind(0, 0, k, l);
+			int idx = shape.sub2ind(0, 0, 0, k, l);
 			return data[idx];
 		}
 		inline T at(int l) {
-			int idx = shape.sub2ind(0, 0, 0, l);
+			int idx = shape.sub2ind(0, 0, 0, 0, l);
 			return data[idx];
 		}
 
 		inline T get(int idx) { return data[idx]; }
-
-		inline T operator()(int i, int j, int k, int l) {
-			int idx = shape.sub2ind(i, j, k, l);
-			return data[idx];
-		}
-		inline T operator()(int j, int k, int l) {
-			int idx = shape.sub2ind(0, j, k, l);
-			return data[idx];
-		}
-		inline T operator()(int k, int l) {
-			int idx = shape.sub2ind(0, 0, k, l);
-			return data[idx];
-		}
-		inline T operator()(int l) {
-			int idx = shape.sub2ind(0, 0, 0, l);
-			return data[idx];
-		}
 		
 		// rotate operation
 		Tensor<T> rotate180() {
-			int size[] = { shape[0], shape[2], shape[1], shape[3] };
+			int size[] = { shape[0], shape[1], shape[3], shape[2], shape[4] };
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
 			// rotate by (f,:,:,c)
-			foreach([&](int ii, int ij, int ik, int il) {
-				T value = this->at(ii, shape[2] - ik - 1, shape[1] - ij - 1, il);
-				out.set(value, ii, ij, ik, il);
+			out.foreach_assign([&](int ii, int ij, int ik, int il, int im) {
+				return this->at(ii, ij, shape[3] - il - 1, shape[2] - ik - 1, im);
 			});
 			return out;
 		}
 		
 		// padding/clipping operation
 		Tensor<T> padding(int width) {
-			int size[] = { shape[0], shape[1] + width*2, shape[2] + width*2, shape[3] };
+			int size[] = {
+				shape[0], shape[1],
+				shape[2] + width * 2, shape[3] + width * 2, 
+				shape[4]
+			};
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
 			// calculate 2d padding
-			foreach([&](int ii, int ij, int ik, int il) {
-				T value = this->at(ii, ij, ik, il);
-				out.set(value, ii, ij + width, ik + width, il);
+			foreach([&](int ii, int ij, int ik, int il, int im) {
+				T value = this->at(ii, ij, ik, il, im);
+				out.set(value, ii, ij, ik + width, il + width, im);
 			});
 			return out;
 		}
 		Tensor<T> clipping(int margin) {
-			int size[] = { shape[0], shape[1] - margin*2, shape[2] - margin*2, shape[3] };
+			int size[] = {
+				shape[0], shape[1],
+				shape[2] - margin * 2, shape[3] - margin * 2,
+				shape[4]
+			};
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
 			// calculate 2d clipping
-			out.foreach_assign([&](int ii, int ij, int ik, int il) {
-				return = this->at(ii, ij + margin, ik + margin, il);
+			out.foreach_assign([&](int ii, int ij, int ik, int il, int im) {
+				return this->at(ii, ij, ik + margin, il + margin, im);
 			});
 			return out;
 		}
 
 		// convolution operation
-		Tensor<T> conv2d(Tensor<T> &filter, int stride) {
-			// rotate 180 degree
-			Tensor<T> m_filter = filter.rotate180();
-			// calculate output shape
-			Shape filter_shape = m_filter.getShape();// (1, width, height, channel)
-			int width = (shape[1] - filter_shape[1]) / stride + 1;// new height
-			int height = (shape[2] - filter_shape[2]) / stride + 1;// new height
-			int channel = filter_shape[0];// number of filters
-			int size[] = { shape[0], width, height, channel };
+		Tensor<T> conv2d(Tensor<T> &filter, Tensor<T> &bias, int stride) {
+			Shape filter_shape = filter.getShape();
+			
+			// output shape (n_samples, 1, width, height, channel)
+			int n_samples = shape[0];
+			int n_frames = shape[1];
+			int width = (shape[2] - filter_shape[2]) / stride + 1;
+			int height = (shape[3] - filter_shape[3]) / stride + 1;
+			int n_channels = filter_shape[0];// number of channels
+			Shape output_shape(n_samples, n_frames, width, height, n_channels);
+			
+			// for unit test
+			int before[] = { 0, 1, 4, 2, 3 };
+			int count = filter_shape[1] * filter_shape[2] * filter_shape[3] * filter_shape[4];
+
 			// calculate 2d concolution
-			Tensor<T> out = Tensor<T>::zeros(Shape(size));
-			out.foreach([&](int oi, int oj, int ok, int ol) {
-				if (ol == 0) {
-					// (:,:,:,kc)*(1,:,:,kc)
-					m_filter.foreach([&](int ki, int kj, int kk, int kl) {
-						T a = this->at(oi, oj*stride + kj, ok*stride + kk, kl);		// original image
-						T b = m_filter.at(ki, kj, kk, kl);							// filter
-						T o = out.at(oi, oj, ok, kl);								// accumulate
-						out.set((o + a*b), oi, oj, ok, kl); // for each channel
+			Tensor<T> out = Tensor<T>::zeros(output_shape);
+			out.foreach([&](int oi, int oj, int ok, int ol, int om) {
+				if (om == 0) {// channel
+					int index = 1; T value = 0;
+					// (n_samples,1,:,:,n_channels)*(n_filters,1,:,:,n_channels)
+					filter.foreach([&](int ki, int kj, int kk, int kl, int km) {
+						// (1, frame, width, height, channel)						
+						T a = this->at(oi, oj, ok*stride + kk, ol*stride + kl, km);
+						T b = filter.at(ki, kj, kk, kl, km);
+						value = value + a*b;
+						if ((index++) == count) {
+							T z = bias.at(ki); // bias
+							out.set(value + z, oi, oj, ok, ol, ki); // for each channel
+							cout << "---------------------------------" << endl;
+							out.permute(before).print();
+							index = 1;
+						}
 					});
 				}
 			});
 			return out;
 		}
-		Tensor<T> conv3d(Tensor<T> filter, int stride) {
-			// calculate shape
+		Tensor<T> conv3d(Tensor<T> &filter, Tensor<T> &bias, int stride) {
 			Shape filter_shape = filter.getShape();
-			int width = (shape[1] - filter_shape[1]) / stride + 1;
-			int height = (shape[2] - filter_shape[2]) / stride + 1;
-			int channel = filter_shape[0];
-			Shape output_shape = shape;
-			output_shape.set(shape[0], width, height, channel);
+
+			// output shape (n_samples, n_frames, n_columns, n_rows, n_filters)
+			int n_samples = shape[0];
+			int n_frames = (shape[1] - filter_shape[1]) / stride + 1;
+			int width = (shape[2] - filter_shape[2]) / stride + 1;
+			int height = (shape[3] - filter_shape[3]) / stride + 1;
+			int n_filters = filter_shape[0];
+			Shape output_shape(n_samples, n_frames, width, height, n_filters);
+
+			// for unit test
+			int before[] = { 0, 1, 4, 2, 3 };
+			int count = filter_shape[1] * filter_shape[2] * filter_shape[3] * filter_shape[4];
+
 			// calculate 3d concolution
 			Tensor<T> out = Tensor<T>::zeros(output_shape);
-			out.foreach([&](int oi, int oj, int ok, int ol) {
-				if (ol ==  0) {
-					// (:,:,:,ic)*(nk,:,:,ic)
-					filter.foreach([&](int ki, int kj, int kk, int kl) {
-						T a = this->at(oi, oj*stride + kj, ok*stride + kk, kl);		// original image
-						T b = filter.at(ki, kj, kk, kl);							// filter
-						T o = out.at(oi, oj, ok, ki);								// accumulate
-						out.set((o + a*b), oi, oj, ok, ki);
+			out.foreach([&](int oi, int oj, int ok, int ol, int om) {
+				if (om == 0) {// channel
+					int index = 1; T value = 0;
+					// (n_samples,:,:,:,n_channels)*(n_filters,:,:,:,n_channels)
+					filter.foreach([&](int ki, int kj, int kk, int kl, int km) {
+						// (1, frame, width, height, channel)
+						T a = this->at(oi, oj*stride + kj, ok*stride + kk, ok*stride + kl, km);
+						T b = filter.at(ki, kj, kk, kl, km);
+						value = value + a*b;
+						if ((index++) == count) {
+							T z = bias.at(ki); // bias
+							out.set(value + z, oi, oj, ok, ol, ki);
+							cout << "---------------------------------" << endl;
+							out.permute(before).print();
+							index = 1;
+						}
 					});
 				}
 			});
@@ -564,21 +600,30 @@ namespace tensor {
 		}
 		Tensor<T> avg_pooling(int width) {
 			Tensor<T> out = __pooling_(width, [](T a, T b)->T { return a + b; });
-			return out / (width*width);
+			double area = (width*width);
+			return out / area;
 		}
 
 		// kronecker
-		Tensor<T> kronecker(Tensor<T> tensor) {
-			Shape spk = tensor.getShape();
-			Shape spo(shape[0] * spk[0], shape[1] * spk[1],
-				shape[2] * spk[2], shape[3] * spk[3]);
-			Tensor<T> out = Tensor<T>::zeros(spo);
-			foreach([&](int ii, int ij, int ik, int il) {
-				T a = this->at(ii, ij, ik, il);
-				tensor.foreach([&](int ki, int kj, int kk, int kl) {
-					T value = a * tensor.at(ki, kj, kk, kl);					
-					out.set(value, ii*spk[0] + ki, ij*spk[1] + kj,
-						ik*spk[2] + kk, il*spk[3] + kl);
+		Tensor<T> kronecker(Tensor<T> &tensor) {
+			Shape tensor_shape = tensor.getShape();
+			int size[] = {
+				shape[0] * tensor_shape[0],	shape[1] * tensor_shape[1],
+				shape[2] * tensor_shape[2],	shape[3] * tensor_shape[3],
+				shape[4] * tensor_shape[4]
+			};
+			Shape output_shape(size);
+			Tensor<T> out = Tensor<T>::zeros(output_shape);
+			foreach([&](int ii, int ij, int ik, int il, int im) {
+				T a = this->at(ii, ij, ik, il, im);
+				tensor.foreach([&](int ki, int kj, int kk, int kl, int km) {
+					T value = a * tensor.at(ki, kj, kk, kl, km);					
+					out.set(value, 
+						ii*tensor_shape[0] + ki, 
+						ij*tensor_shape[1] + kj,
+						ik*tensor_shape[2] + kk,
+						il*tensor_shape[3] + kl,
+						im*tensor_shape[4] + km);
 				});
 			});
 			return out;
@@ -586,16 +631,19 @@ namespace tensor {
 
 		// upsampling
 		Tensor<T> max_upsampling(Tensor<T> &input, int width) {
-			__upsampling_(input, width, [](T a, T b)->bool {return a > b; });
+			return __upsampling_(input, width, [](T a, T b)->bool {return a == b; });
 		}
 		Tensor<T> min_upsampling(Tensor<T> &input, int width) {
-			__upsampling_(input, width, [](T a, T b)->bool {return a < b; });
+			return __upsampling_(input, width, [](T a, T b)->bool {return a == b; });
 		}
 		Tensor<T> avg_upsampling(int width) {
-			// calculate 2d up_sampling (AVG)
-			Shape shape(1, width, width, 1);
+			// 2d up_sampling (AVG) ref: https://www.cnblogs.com/pinard/p/6494810.html#!comments
+			int size[] = { 1, 1, width, width, 1 };
+			Shape shape(size);
 			Tensor<T> tensor = Tensor<T>::ones(shape);
-			tensor = tensor / (width*width);
+			double area = (width*width);
+			tensor = tensor / area;
+			tensor.print();
 			return this->kronecker(tensor);
 		}
 		
@@ -666,24 +714,29 @@ namespace tensor {
 			Tensor<T> out(shape_out);
 			// slice
 			switch (axis) {
-			case 0:
-				out.foreach_assign([&](int i, int j, int k, int l) {
-					return this->at(i + start, j, k, l);
+			case 0:// sample
+				out.foreach_assign([&](int i, int j, int k, int l, int m) {
+					return this->at(i + start, j, k, l, m);
 				});
 				break;
-			case 1:
-				out.foreach_assign([&](int i, int j, int k, int l) {
-					return this->at(i, j + start, k, l);
+			case 1:// frame
+				out.foreach_assign([&](int i, int j, int k, int l, int m) {
+					return this->at(i, j + start, k, l, m);
 				});
 				break;
-			case 2:
-				out.foreach_assign([&](int i, int j, int k, int l) {
-					return this->at(i, j, k + start, l);
+			case 2:// width
+				out.foreach_assign([&](int i, int j, int k, int l, int m) {
+					return this->at(i, j, k + start, l, m);
 				});
 				break;
-			case 3:
-				out.foreach_assign([&](int i, int j, int k, int l) {
-					return this->at(i, j, k, l + start);
+			case 3:// height
+				out.foreach_assign([&](int i, int j, int k, int l, int m) {
+					return this->at(i, j, k, l + start, m);
+				});
+				break;
+			case 4:// channel
+				out.foreach_assign([&](int i, int j, int k, int l, int m) {
+					return this->at(i, j, k, l, m + start);
 				});
 				break;
 			default:
@@ -705,13 +758,12 @@ namespace tensor {
 		
 		void print() {
 			shape.print();
-			foreach([&](int i, int j, int k, int l){
-				T value = this->at(i, j, k, l);
-				if (k == 0 && l == 0) {
-					printf("Tensor (%d, %d, :, :)\n", i, j);
+			foreach([this](int i, int j, int k, int l, int m)->void {
+				if (l == 0 && m == 0) {
+					printf("Tensor (%d, %d, %d :, :)\n", i, j, k);
 				}
-				printf("%5.2f\t", value);
-				if (l == shape[3] - 1) {
+				printf("%5.2f\t", this->at(i, j, k, l, m));
+				if (m == shape[4] - 1) {
 					printf("\n");
 				}
 			});
@@ -720,7 +772,7 @@ namespace tensor {
 		// static method
 		static Tensor<T> ones(Shape &shape) {
 			Tensor<T> out(shape);
-			out.foreach_elem_assign([](int i) {
+			out.foreach_elem_assign([&](int i) {
 				return 1;
 			});
 			return out;
@@ -733,11 +785,11 @@ namespace tensor {
 			return out;
 		}
 		static Tensor<T> eye(int n) {
-			int size[] = { 0, 0, n, n };
+			int size[] = { 1, 1, 1, n, n };
 			Shape shape(size);
 			Tensor<T> out(shape);
-			out.foreach_assign([](int i, int j, int k, int l) {
-				return ((k == l) ? 1 : 0);
+			out.foreach_assign([](int oi, int oj, int ok, int ol, int om) {
+				return ((ol == om) ? 1 : 0);
 			});
 			return out;
 		}
@@ -787,8 +839,8 @@ namespace tensor {
 	};
 
 	// scalar matrix functions
-	template<class T, class K>
-	Tensor<T> foreach_elem(T x, Tensor<T> &y, K func) {
+	template<class T, class Type>
+	Tensor<T> foreach_elem(T x, Tensor<T> &y, Type func) {
 		Tensor<T> out = Tensor<T>::zeros(y.getShape());
 		out.foreach_elem_assign([&](int i) { 
 			return func(x, y.get(i));

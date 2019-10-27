@@ -101,23 +101,21 @@ namespace layers {
 	template<class T>
 	class Convolution : public Layer<T> {
 	protected:
-		Tensor<T> filter;
+		Tensor<T> filter, bias;
 		int padding;
 		int stride;
 		string activation;
+		Tensor<T> grad_f, grad_b;
 	public:
 		Convolution(int width = 3, int padding=0, int stride = 1,
 			int n_filters = 1, string activation = "sigmoid") 
 			: Layer<T>(), padding(padding), stride(stride), activation(activation) {
-			Shape filter_shape(n_filters, width, width, 1);
+			Shape filter_shape(n_filters, 1, width, width, 1);
 			filter = Tensor<T>(filter_shape);
+			bias = Tensor<T>(1, 1, 1, 1, n_filters);
 		}
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
-			Shape input_shape = input->getShape();
-			Shape filter_shape = filter.getShape();
-			filter_shape.set(3, input_shape[3]);// n_channels
-			filter = Tensor<T>(filter_shape);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
 			Tensor<T> m_data = Layer<T>::forward(data);
@@ -136,37 +134,53 @@ namespace layers {
 	public:
 		Conv2D(int width = 3, int padding=0, int stride = 1,
 			int n_filters = 1, string activation = "sigmoid")
-			: Convolution<T>(width, padding, stride, n_filters, activation) {
+			: Convolution<T>(width, padding, stride, n_filters, activation) { ; }
+		virtual void setInput(Layer<T> *input) {
+			Convolution<T>::setInput(input);
+
+			Shape input_shape = input->getShape();
+			Shape filter_shape = filter.getShape();
+			filter_shape.set(input_shape[1], 1);
+			filter_shape.set(input_shape[4], 4);
+			filter = Tensor<T>(filter_shape);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
 			input_value = Convolution<T>::forward(data);
-			return input_value.conv2d(filter, stride);
+			return input_value.conv2d(filter, bias, stride);
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			Tensor<T> m_delta = input_value.conv2d(delta.rotate180(), stride);
-			return Convolution<T>::backward(m_delta.rotate180());
+			grad_w = input_value.conv2d(delta, stride);
+			grad_b = delta.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3).permute(order);
+			Tensor<T> m_delta = delta.padding(width).conv2d(filter.rotate180(), stride);
+			return Convolution<T>::backward(m_delta);
 		}
 	};
 
 	template<class T>
 	class Conv3D : public Convolution<T> {
 	private:
-		Tensor<T> filter;
-		int stride;
-		string activation;
+		Tensor<T> input_value;
 	public:
 		Conv3D(int width = 3, int padding = 0, int stride = 1,
 			int n_filters = 1, string activation = "sigmoid")
-			: Convolution<T>(width, padding, stride, n_filters, activation) {
-			Shape filter_shape(n_filters, width, width, 1);
+			: Convolution<T>(width, padding, stride, n_filters, activation) { ; }
+		virtual void setInput(Layer<T> *input) {
+			Convolution<T>::setInput(input);
+
+			Shape filter_shape(n_filters, n_frames, width, width, 1);
+			filter_shape.set(input_shape[1], 1);
+			filter_shape.set(input_shape[4], 4);
 			filter = Tensor<T>(filter_shape);
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
-			Tensor<T> x = Convolution<T>::forward(data);
-			return x.conv3d(filter, stride);
+			input_value = Convolution<T>::forward(data);
+			return input_value.conv3d(filter, bias, stride);
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			return Convolution<T>::backward(data);
+			grad_w = input_value.conv3d(delta, stride);
+			grad_b = delta.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3).permute(order);
+			Tensor<T> m_delta = delta.padding(width).conv3d(filter.rotate180(), stride);
+			return Convolution<T>::backward(m_delta);
 		}
 	};
 
