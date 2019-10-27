@@ -68,7 +68,10 @@ namespace shape {
 				return (dims[0] * dims[1] * dims[2] * dims[3] * dims[4]);
 			}
 			inline int sub2ind(int i, int j, int k, int l, int m) {
-				return (((((i*dims[1]) + j)*dims[2] + k)*dims[3] + l)*dims[4] + m);
+				return ((((i*dims[1] + j)*dims[2] + k)*dims[3] + l)*dims[4] + m);
+			}
+			inline int sub2ind(int subs[]) {
+				return sub2ind(subs[0], subs[1], subs[2], subs[3], subs[4]);
 			}
 			inline int* ind2sub(int idx) {
 				int *sub = new int[5];
@@ -90,9 +93,9 @@ namespace shape {
 				}
 				return in;
 			}
-			friend ostream& operator << (ostream& out, const Shape &shape) {
+			friend ostream& operator << (ostream& out, Shape &shape) {
 				for (int i = 0; i < 5; i++) {
-					out << shape[i] << " ";
+					out << shape.dims[i] << " ";
 				}
 				return out;
 			}

@@ -9,9 +9,11 @@
 #include <math.h>
 #include <string>
 #include <functional>
-
+#include <vector>
+#include <numeric>
 #include <set>
 #include <iostream>
+#include <sstream>
 #include <iomanip>
 #include <fstream>
 #include <map>
@@ -100,8 +102,7 @@ namespace tensor {
 
 	protected:
 
-		//template<class K>
-		Tensor<T> __foreach_assign_(Tensor<T> &tensor, T(*func)(T, T)) {
+		Tensor<T> __foreach_assign_(Tensor<T> &tensor, function<T(T, T)> func) {
 			Shape m_shape = tensor.getShape();
 			Tensor<T> out(m_shape);
 			int axis = -1;
@@ -145,8 +146,7 @@ namespace tensor {
 			}
 			return out;
 		}
-		template<class Type>
-		Tensor<T> __foreach_elem_assign_(Type func) {
+		Tensor<T> __foreach_elem_assign_(function<T(T)> func) {
 			Tensor<T> out(shape);
 			out.foreach_elem_assign([&](int i) {
 				return func(data[i]);
@@ -198,9 +198,7 @@ namespace tensor {
 			return out;
 		}
 
-	public:
-
-		// constructor
+	public: // constructor & destructor
 		Tensor() {
 			data = nullptr;
 		}
@@ -218,27 +216,28 @@ namespace tensor {
 		}
 		Tensor(Tensor<T> &tensor) : shape(tensor.getShape()) {
 			__allocate_();
-			foreach_assign([&](int n, int f, int w, int h, int c) {
-				return tensor.at(n, f, w, h, c);
+			foreach_assign([&](int i, int j, int k, int l, int m) {
+				return tensor.at(i, j, k, l, m);
 			});
 		}
 		~Tensor() {
 			__free_();
 		}
 
-		// get & set methods
+		
+	public: // get & set methods
 		Shape getShape() { return shape; }
-		int size() { return (sizeof(T)*shape.size()); }
 		int length() { return shape.size(); }
+		int size() { return (sizeof(T)*shape.size()); }
 
 		// non-parallel foreach
 		void foreach(function<void(int,int,int,int,int)> func) {
-			for (int n = 0; n < shape[0]; n++) {// sample
-				for (int f = 0; f < shape[1]; f++) {// frame
-					for (int w = 0; w < shape[2]; w++) {// column(width)
-						for (int h = 0; h < shape[3]; h++) {// row(height)
-							for (int c = 0; c < shape[4]; c++) {// depth(channel)
-								func(n, f, w, h, c);
+			for (int i = 0; i < shape[0]; i++) {// sample
+				for (int j = 0; j < shape[1]; j++) {// frame
+					for (int k = 0; k < shape[2]; k++) {// column(width)
+						for (int l = 0; l < shape[3]; l++) {// row(height)
+							for (int m = 0; m < shape[4]; m++) {// depth(channel)
+								func(i, j, k, l, m);
 							}
 						}
 					}
@@ -253,14 +252,14 @@ namespace tensor {
 		}
 		
 		// parallel foreach elem
-		template<typename Type>
+		template<class Type>
 		void foreach_elem(Type func) {
 			int len = length();
 			for (int i = 0; i < len; i++) {
 				func(i);
 			}
 		}
-		template<typename Type>
+		template<class Type>
 		void foreach_elem_assign(Type func) {
 			int len = length();
 			for (int i = 0; i < len; i++) {
@@ -268,6 +267,7 @@ namespace tensor {
 			}
 		}
 
+	public:
 		// operators
 		Tensor<T> one_hot(int num) {
 			Shape output_shape(shape[0], shape[1], shape[2], shape[3], num);
@@ -398,13 +398,13 @@ namespace tensor {
 			return out / N;
 		}
 
-		// scalar operator
+	public: // scalar operator
 		Tensor<T> operator +(T b) { return __foreach_elem_assign_([=](T x) { return x + b; }); }
 		Tensor<T> operator -(T b) { return __foreach_elem_assign_([=](T x) { return x - b; }); }
 		Tensor<T> operator *(T b) { return __foreach_elem_assign_([=](T x) { return x * b; }); }
 		Tensor<T> operator /(T b) { return __foreach_elem_assign_([=](T x) { return x / b; }); }
-
-		// matrix operator
+		
+	public: // matrix operator
 		Tensor<T> operator +(Tensor<T> &x) {
 			return __foreach_assign_(x, [](T a, T b) { return a + b; });
 		}
@@ -439,31 +439,15 @@ namespace tensor {
 		}
 
 		// operator ()
-		inline void set(T t, int i) {
-			data[i] = t;
+		inline void set(T value, int i) {
+			data[i] = value;
 		}
 		inline void set(T value, int i, int j, int k, int l, int m) {
 			int idx = shape.sub2ind(i, j, k, l, m);
 			data[idx] = value;
 		}
-		inline void set(T value, int i, int j, int k, int l) {
-			int idx = shape.sub2ind(0, i, j, k, l);
-			data[idx] = value;
-		}
 		inline T at(int i, int j, int k, int l, int m) {
 			int idx = shape.sub2ind(i, j, k, l, m);
-			return data[idx];
-		}
-		inline T at(int i, int j, int k, int l) {
-			int idx = shape.sub2ind(0, i, j, k, l);
-			return data[idx];
-		}
-		inline T at(int j, int k, int l) {
-			int idx = shape.sub2ind(0, 0, j, k, l);
-			return data[idx];
-		}
-		inline T at(int k, int l) {
-			int idx = shape.sub2ind(0, 0, 0, k, l);
 			return data[idx];
 		}
 		inline T at(int l) {
@@ -475,11 +459,11 @@ namespace tensor {
 		
 		// rotate operation
 		Tensor<T> rotate180() {
-			int size[] = { shape[0], shape[1], shape[3], shape[2], shape[4] };
-			Tensor<T> out = Tensor<T>::zeros(Shape(size));
-			// rotate by (f,:,:,c)
-			out.foreach_assign([&](int ii, int ij, int ik, int il, int im) {
-				return this->at(ii, ij, shape[3] - il - 1, shape[2] - ik - 1, im);
+			Tensor<T> out = Tensor<T>::zeros(shape);
+			// rotate by (:,:,w,h,:)
+			out.foreach([&](int ii, int ij, int ik, int il, int im) {
+				T value = at(ii, ij, shape[2] - ik - 1, shape[3] - il - 1, im);
+				out.set(value, ii, ij, ik, il, im);
 			});
 			return out;
 		}
@@ -530,26 +514,35 @@ namespace tensor {
 			int count = filter_shape[1] * filter_shape[2] * filter_shape[3] * filter_shape[4];
 
 			// calculate 2d concolution
+#ifdef DEBUG
+			cout << "<---------------------------------" << endl;
+#endif // DEBUG
+			std::vector<T> list;
 			Tensor<T> out = Tensor<T>::zeros(output_shape);
 			out.foreach([&](int oi, int oj, int ok, int ol, int om) {
-				if (om == 0) {// channel
-					int index = 1; T value = 0;
+				if (om == 0) {// channel					
 					// (n_samples,1,:,:,n_channels)*(n_filters,1,:,:,n_channels)
 					filter.foreach([&](int ki, int kj, int kk, int kl, int km) {
-						// (1, frame, width, height, channel)						
+						// (1, frame, width, height, channel)		
 						T a = this->at(oi, oj, ok*stride + kk, ol*stride + kl, km);
 						T b = filter.at(ki, kj, kk, kl, km);
-						value = value + a*b;
-						if ((index++) == count) {
-							T z = bias.at(ki); // bias
-							out.set(value + z, oi, oj, ok, ol, ki); // for each channel
+						list.push_back(a * b);
+						if (list.size() == count) {
+							T value = accumulate(list.begin(), list.end(), 0);
+							T z = bias.at(ki);
+							out.set(value + z, oi, oj, ok, ol, ki);
+#ifdef DEBUG
 							cout << "---------------------------------" << endl;
 							out.permute(before).print();
-							index = 1;
+#endif // DEBUG
+							list.clear();
 						}
 					});
 				}
 			});
+#ifdef DEBUG
+			cout << "--------------------------------->" << endl;
+#endif // DEBUG
 			return out;
 		}
 		Tensor<T> conv3d(Tensor<T> &filter, Tensor<T> &bias, int stride) {
@@ -567,7 +560,11 @@ namespace tensor {
 			int before[] = { 0, 1, 4, 2, 3 };
 			int count = filter_shape[1] * filter_shape[2] * filter_shape[3] * filter_shape[4];
 
-			// calculate 3d concolution
+#ifdef DEBUG
+			cout << "<---------------------------------" << endl;
+#endif // DEBUG
+			// calculate 3d concolution	
+			std::vector<T> list;
 			Tensor<T> out = Tensor<T>::zeros(output_shape);
 			out.foreach([&](int oi, int oj, int ok, int ol, int om) {
 				if (om == 0) {// channel
@@ -577,17 +574,23 @@ namespace tensor {
 						// (1, frame, width, height, channel)
 						T a = this->at(oi, oj*stride + kj, ok*stride + kk, ok*stride + kl, km);
 						T b = filter.at(ki, kj, kk, kl, km);
-						value = value + a*b;
-						if ((index++) == count) {
-							T z = bias.at(ki); // bias
+						list.push_back(a * b);
+						if (list.size() == count) {
+							T value = accumulate(list.begin(), list.end(), 0);
+							T z = bias.at(ki);
 							out.set(value + z, oi, oj, ok, ol, ki);
+#ifdef DEBUG
 							cout << "---------------------------------" << endl;
 							out.permute(before).print();
-							index = 1;
+#endif // DEBUG
+							list.clear();
 						}
 					});
 				}
 			});
+#ifdef DEBUG
+			cout << "--------------------------------->" << endl;
+#endif // DEBUG
 			return out;
 		}
 		
@@ -618,11 +621,8 @@ namespace tensor {
 				T a = this->at(ii, ij, ik, il, im);
 				tensor.foreach([&](int ki, int kj, int kk, int kl, int km) {
 					T value = a * tensor.at(ki, kj, kk, kl, km);					
-					out.set(value, 
-						ii*tensor_shape[0] + ki, 
-						ij*tensor_shape[1] + kj,
-						ik*tensor_shape[2] + kk,
-						il*tensor_shape[3] + kl,
+					out.set(value, ii*tensor_shape[0] + ki, ij*tensor_shape[1] + kj,
+						ik*tensor_shape[2] + kk, il*tensor_shape[3] + kl,
 						im*tensor_shape[4] + km);
 				});
 			});
@@ -641,10 +641,13 @@ namespace tensor {
 			int size[] = { 1, 1, width, width, 1 };
 			Shape shape(size);
 			Tensor<T> tensor = Tensor<T>::ones(shape);
-			double area = (width*width);
+			double area = (double)(width*width);
+			int order[] = { 0, 1, 4, 2, 3 };
 			tensor = tensor / area;
-			tensor.print();
-			return this->kronecker(tensor);
+			tensor.permute(order).print();
+			Tensor<T> out = kronecker(tensor);
+			out.permute(order).print();
+			return out;
 		}
 		
 		// math function
@@ -758,7 +761,7 @@ namespace tensor {
 		
 		void print() {
 			shape.print();
-			foreach([this](int i, int j, int k, int l, int m)->void {
+			foreach([&](int i, int j, int k, int l, int m)->void {
 				if (l == 0 && m == 0) {
 					printf("Tensor (%d, %d, %d :, :)\n", i, j, k);
 				}
@@ -824,18 +827,24 @@ namespace tensor {
 			in >> tensor.shape;
 			// re-allocate
 			tensor.__allocate_();
-			for (int i = 0; i < tensor.length(); i++) {
-				in >> setiosflags(ios::basefield) >> setprecision(18) >> tensor.data[i];
-			}
+			tensor.foreach_assign([&](int i, int j, int k, int l, int m) {
+				T value;
+				in >> setiosflags(ios::basefield) >> setprecision(18) >> value;
+				return value;
+			});
 			return in;
 		}
 		friend ostream& operator << (ostream &out, Tensor<T> &tensor) {
 			out << tensor.shape << endl;
-			for (int i = 0; i < tensor.length(); i++) {
-				out << setiosflags(ios::basefield) << setprecision(18) << tensor.data[i] << " ";
-			}
+			tensor.foreach([&](int i, int j, int k, int l, int m) {
+				T value = tensor.at(i, j, k, l, m);
+				out << setiosflags(ios::basefield) << setprecision(18) << value << " ";
+				if (m == tensor.shape[4] - 1) {
+					out << endl;
+				}
+			});
+			return out;
 		}
-
 	};
 
 	// scalar matrix functions
@@ -869,7 +878,13 @@ namespace tensor {
 	}
 	
 	template<class T>
-	void test();
+	void test_basic();
+
+	template<class T>
+	void test_conv();
+
+	template<class T>
+	void test_pooling();
 }
 
 #endif // !_TENSOR_H_

@@ -143,6 +143,7 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="softmax.txt" />
+    <Text Include="tensor.txt" />
     <Text Include="Text.txt" />
     <Text Include="mat.txt" />
     <Text Include="filter.txt" />

@@ -3,9 +3,13 @@
 
 int main(int argc, char* argv[]) {
 
-	
-	model::test<double>();
 
+	//tensor::test_basic<double>();
+	tensor::test_conv<double>();
+	//tensor::test_pooling<double>();
+
+	//model::test<double>();
 	getchar();
+
 	return 0;
 }
