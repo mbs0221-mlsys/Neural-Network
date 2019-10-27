@@ -11,6 +11,9 @@ template void tensor::test_basic<double>();
 template void tensor::test_conv<double>();
 template void tensor::test_pooling<double>();
 
+int after[] = { 0, 1, 3, 4, 2 };
+int before[] = { 0, 1, 4, 2, 3 };
+
 template<class T>
 void tensor::test_basic() {
 
@@ -36,27 +39,27 @@ void tensor::test_basic() {
 template<class T>
 void tensor::test_conv() {
 
-	Tensor<T> mat, filter, bias;
+	Tensor<T> tensor, filter, bias;
 	ifstream inf("tensor.txt");
 	if (inf.is_open()) {
-		inf >> mat;
+		inf >> tensor;
 		inf >> filter;
 		inf >> bias;
 		inf.close();
 	}
-	int after[] = { 0, 1, 3, 4, 2 };
-	int before[] = { 0, 1, 4, 2, 3 };
 
-	//ofstream outf("tensor.txt");
-	//if (outf.is_open()) {
-	//	outf << mat.permute(after) << endl;
-	//	outf << filter.permute(after) << endl;
-	//	outf << bias << endl;
-	//	outf.close();
-	//}
+	ofstream outf("tensor.txt");
+	if (outf.is_open()) {
+		outf << tensor << endl;
+		outf << filter << endl;
+		outf << bias << endl;
+		outf.close();
+	}
+
+	getchar();
 
 	cout << "mat;" << endl;
-	mat.padding(1).permute(before).print();
+	tensor.padding(1).permute(before).print();
 
 	cout << "filter;" << endl;
 	filter.permute(before).print();// (:,:,channel,row,col)
@@ -68,39 +71,36 @@ void tensor::test_conv() {
 	filter.rotate180().permute(before).print();
 
 	cout << "conv2d;" << endl;
-	mat.padding(1).conv2d(filter, bias, 2).permute(before).print();
+	tensor.padding(1).conv2d(filter, bias, 2).permute(before).print();
 
 	cout << "conv3d;" << endl;
-	mat.padding(1).conv3d(filter, bias, 2).permute(before).print();
+	tensor.padding(1).conv3d(filter, bias, 2).permute(before).print();
 
 	getchar();
 }
 
 template<class T>
 void tensor::test_pooling() {
-	int after[] = { 0, 1, 3, 4, 2 };
-	int before[] = { 0, 1, 4, 2, 3 };
 
-	Tensor<T> pooling;
-	pooling.load("pooling.txt");
-	pooling.print();
+	Tensor<T> tensor;
+
+	tensor.load("pooling.txt");
+	tensor.save("pooling.txt");
+
 	cout << "pooling;" << endl;
-	pooling.permute(after).max_pooling(2).permute(before).print();
-	pooling.permute(after).min_pooling(2).permute(before).print();
-	pooling.permute(after).avg_pooling(2).permute(before).print();
+	tensor.permute(before).print();
+	
+	cout << "rotate180;" << endl;
+	tensor.rotate180().permute(before).print();
+
+	cout << "pooling;" << endl;
+	tensor.max_pooling(2).permute(before).print();
+	tensor.min_pooling(2).permute(before).print();
+	tensor.avg_pooling(2).permute(before).print();
 
 	cout << "upsampling;" << endl;
-	Tensor<T> x = pooling.permute(after).max_pooling(2);
-	x.max_upsampling(pooling.permute(after), 2).permute(before).print();
+	tensor.max_pooling(2).upsampling(tensor, 2).permute(before).print();
+	tensor.min_pooling(2).upsampling(tensor, 2).permute(before).print();
+	tensor.avg_pooling(2).avg_upsampling(2).permute(before).print();
 
-	Tensor<T> y = pooling.permute(after).min_pooling(2);
-	y.min_upsampling(pooling.permute(after), 2).permute(before).print();
-
-	Tensor<T> z = pooling.permute(after);
-	z = z.avg_pooling(2);
-	z = z.avg_upsampling(2);
-	z = z.permute(before);
-	z.print();
-
-	pooling.permute(after).rotate180().permute(before).print();
 }

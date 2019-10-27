@@ -93,8 +93,7 @@ namespace tensor {
 		}
 		inline void __allocate_() {
 			try {
-				int len = length();
-				data = new T[len];
+				data = new T[length()];
 			} catch (const bad_alloc & e){
 				cerr << e.what() << endl;
 			}
@@ -176,28 +175,7 @@ namespace tensor {
 			});
 			return out;
 		}
-		inline Tensor<T> __upsampling_(Tensor<T> &input, int width, bool(*comp)(T, T)) {
-			// 2d up_sampling (MAX, MIN) ref: https://www.cnblogs.com/pinard/p/6494810.html#!comments
-			Tensor<T> out = Tensor<T>::zeros(input.getShape());
-			foreach([&](int oi, int oj, int ok, int ol, int om) {
-				T value = this->at(oi, oj, ok, ol, om);
-				// find the position of value (MAX, MIN) in input
-				int pk, pl;
-				pk = pl = 0;
-				for (int k = 0; k < width; k++) {
-					for (int l = 0; l < width; l++) {
-						T curr = input.at(oi, oj, ok*width + k, ol*width + l, om);
-						if (comp(value, curr)) {
-							pk = k, pl = l;
-						}
-					}
-				}
-				// assign corresponding value
-				out.set(value, oi, oj, ok*width + pk, ol*width + pl, om);
-			});
-			return out;
-		}
-
+		
 	public: // constructor & destructor
 		Tensor() {
 			data = nullptr;
@@ -399,10 +377,10 @@ namespace tensor {
 		}
 
 	public: // scalar operator
-		Tensor<T> operator +(T b) { return __foreach_elem_assign_([=](T x) { return x + b; }); }
-		Tensor<T> operator -(T b) { return __foreach_elem_assign_([=](T x) { return x - b; }); }
-		Tensor<T> operator *(T b) { return __foreach_elem_assign_([=](T x) { return x * b; }); }
-		Tensor<T> operator /(T b) { return __foreach_elem_assign_([=](T x) { return x / b; }); }
+		Tensor<T> operator +(T b) { return __foreach_elem_assign_([&](T x) { return x + b; }); }
+		Tensor<T> operator -(T b) { return __foreach_elem_assign_([&](T x) { return x - b; }); }
+		Tensor<T> operator *(T b) { return __foreach_elem_assign_([&](T x) { return x * b; }); }
+		Tensor<T> operator /(T b) { return __foreach_elem_assign_([&](T x) { return x / b; }); }
 		
 	public: // matrix operator
 		Tensor<T> operator +(Tensor<T> &x) {
@@ -457,6 +435,7 @@ namespace tensor {
 
 		inline T get(int idx) { return data[idx]; }
 		
+	public:
 		// rotate operation
 		Tensor<T> rotate180() {
 			Tensor<T> out = Tensor<T>::zeros(shape);
@@ -499,9 +478,9 @@ namespace tensor {
 
 		// convolution operation
 		Tensor<T> conv2d(Tensor<T> &filter, Tensor<T> &bias, int stride) {
-			Shape filter_shape = filter.getShape();
-			
+
 			// output shape (n_samples, 1, width, height, channel)
+			Shape filter_shape = filter.getShape();
 			int n_samples = shape[0];
 			int n_frames = shape[1];
 			int width = (shape[2] - filter_shape[2]) / stride + 1;
@@ -629,27 +608,35 @@ namespace tensor {
 			return out;
 		}
 
-		// upsampling
-		Tensor<T> max_upsampling(Tensor<T> &input, int width) {
-			return __upsampling_(input, width, [](T a, T b)->bool {return a == b; });
-		}
-		Tensor<T> min_upsampling(Tensor<T> &input, int width) {
-			return __upsampling_(input, width, [](T a, T b)->bool {return a == b; });
-		}
-		Tensor<T> avg_upsampling(int width) {
-			// 2d up_sampling (AVG) ref: https://www.cnblogs.com/pinard/p/6494810.html#!comments
-			int size[] = { 1, 1, width, width, 1 };
-			Shape shape(size);
-			Tensor<T> tensor = Tensor<T>::ones(shape);
-			double area = (double)(width*width);
-			int order[] = { 0, 1, 4, 2, 3 };
-			tensor = tensor / area;
-			tensor.permute(order).print();
-			Tensor<T> out = kronecker(tensor);
-			out.permute(order).print();
+		// upsampling ref:
+		Tensor<T> upsampling(Tensor<T> &input, int width) {
+			// 2d up_sampling (MAX, MIN)  https://www.cnblogs.com/pinard/p/6494810.html#!comments
+			Tensor<T> out = Tensor<T>::zeros(input.getShape());
+			foreach([&](int oi, int oj, int ok, int ol, int om) {
+				T value = this->at(oi, oj, ok, ol, om);
+				// find the position of value (MAX, MIN) in input
+				int pk, pl;
+				for (int k = 0; k < width; k++) {
+					for (int l = 0; l < width; l++) {
+						T curr = input.at(oi, oj, ok*width + k, ol*width + l, om);
+						if (value == curr) {
+							pk = k, pl = l;
+							break;
+						}
+					}
+				}
+				// assign corresponding value
+				out.set(value, oi, oj, ok*width + pk, ol*width + pl, om);
+			});
 			return out;
 		}
+		Tensor<T> avg_upsampling(int width) {
+			// 2d up_sampling (AVG)  https://www.cnblogs.com/pinard/p/6494810.html#!comments
+			Shape shape(1, 1, width, width, 1);
+			return kronecker(Tensor<T>::numbers(shape, 1.0f / (width*width)));
+		}
 		
+	public:
 		// math function
 		Tensor<T> softmax() { 
 			Tensor<T> sum_e = exp().reduce_sum(1); 
@@ -748,7 +735,18 @@ namespace tensor {
 			return out;
 		}
 		
-		// matrix operation	
+		// matrix operation
+		Tensor<T>& operator=(Tensor<T> &tensor) {
+			Shape tensor_shape = tensor.getShape();
+			if (length() != tensor.length()) {
+				__free_();
+				__allocate_();
+			}
+			this->foreach_assign([&](int ii, int ij, int ik, int il, int im) {
+				return tensor.at(ii, ij, ik, il, im);
+			});
+			return (*this);
+		}
 		bool operator ==(Tensor<T> &a) {
 			bool result = true;
 			foreach_elem([&](int i) {
@@ -773,6 +771,13 @@ namespace tensor {
 		}
 
 		// static method
+		static Tensor<T> numbers(Shape &shape, T value) {
+			Tensor<T> out(shape);
+			out.foreach_elem_assign([&](int i) {
+				return value;
+			});
+			return out;
+		}
 		static Tensor<T> ones(Shape &shape) {
 			Tensor<T> out(shape);
 			out.foreach_elem_assign([&](int i) {
@@ -814,11 +819,11 @@ namespace tensor {
 			}
 		}
 		void save(string path) {
-			ifstream inf;
-			inf.open(path, ios::in);
-			if (inf.is_open()) {
-				inf >> (*this);
-				inf.close();
+			ofstream outf;
+			outf.open(path, ios::out);
+			if (outf.is_open()) {
+				outf << (*this);
+				outf.close();
 			}
 		}
 
@@ -839,9 +844,6 @@ namespace tensor {
 			tensor.foreach([&](int i, int j, int k, int l, int m) {
 				T value = tensor.at(i, j, k, l, m);
 				out << setiosflags(ios::basefield) << setprecision(18) << value << " ";
-				if (m == tensor.shape[4] - 1) {
-					out << endl;
-				}
 			});
 			return out;
 		}

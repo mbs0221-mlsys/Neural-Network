@@ -87,6 +87,14 @@ namespace shape {
 			inline int operator() (int i, int j, int k, int l, int m) {
 				return sub2ind(i, j, k, l, m);
 			}
+			bool operator==(Shape &shape) {
+				for (int i = 0; i < 5; i++) {
+					if (shape.dims[i] != dims[i]) {
+						return false;
+					}
+				}
+				return true;
+			}
 			friend istream& operator >> (istream& in, Shape &shape) {
 				for (int i = 0; i < 5; i++) {
 					in >> shape.dims[i];
