@@ -15,6 +15,8 @@ namespace layers {
 	using namespace ops;
 	
 	//----------------------------------------ABSTRACT LAYER DEFINATION-------
+	template<class T>
+	typedef map<string, Tensor<T>*> Map;
 
 	template<class T>
 	class Layer {
@@ -44,7 +46,8 @@ namespace layers {
 			else
 				return delta;// 若是无输入节点，则返回
 		}
-		virtual void update() { ; }
+		virtual void get_variables(Map &variable) { ; }
+		virtual void get_gradients(Map &gradients) { ; }
 	};
 	//----------------------------------------INPUT LAYER---------------------
 
@@ -63,36 +66,6 @@ namespace layers {
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
 			return delta;// input节点不会有输入，所以直接返回delta
-		}
-	};
-
-	// activation layer
-	template<class T>
-	class Activation {
-	private:
-		Tensor<T> grad;
-		string activation;
-	public:
-		Activation(string activation) : activation(activation) { ; }
-		virtual Tensor<T> forward(Tensor<T> &data) {
-			if (activation == "sigmoid") {
-				Tensor<T> value = data.sigmoid();
-				grad = ops::grad_sigmoid(value);
-				return value;
-			} else if (activation == "relu") {
-				Tensor<T> value = data.relu();
-				grad = ops::grad_relu(data);
-				return value;
-			} else if (activation == "leaky_relu") {
-				value = x.relu(x, max_value, threshold, negative_slope);
-				grad = ops::grad_relu(x, max_value, threshold, negative_slop);
-			} else {
-				throw(std::exception());
-			}
-
-		}
-		virtual Tensor<T> backward(Tensor<T> &delta) {
-			return delta * grad;
 		}
 	};
 
@@ -125,6 +98,14 @@ namespace layers {
 			Tensor<T> m_delta = delta.clipping(padding);
 			return Layer<T>::backward(m_delta);
 		}
+		virtual void get_variables(Map &variable) {
+			variable["conv:filter"] = &filter;
+			variable["conv:bias"] = &bias;
+		}
+		virtual void get_gradients(Map &gradients) { 
+			gradients["conv:filter"] = grad_f;
+			gradients["conv:bias"] = grad_b;
+		}
 	};
 
 	template<class T>
@@ -132,8 +113,8 @@ namespace layers {
 	private:
 		Tensor<T> input_value;
 	public:
-		Conv2D(int width = 3, int padding=0, int stride = 1,
-			int n_filters = 1, string activation = "sigmoid")
+		Conv2D(int width, int padding, int stride,
+			int n_filters, string activation = "sigmoid")
 			: Convolution<T>(width, padding, stride, n_filters, activation) { ; }
 		virtual void setInput(Layer<T> *input) {
 			Convolution<T>::setInput(input);
@@ -216,7 +197,7 @@ namespace layers {
 			return input_value.max_pooling(size);
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			return Pooling<T>::backward(delta.max_upsampling(input_value, width));
+			return Pooling<T>::backward(delta.upsampling(input_value, width));
 		}
 	};
 
@@ -232,7 +213,7 @@ namespace layers {
 			return input_value.min_pooling(width);
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
-			return Pooling<T>::backward(delta.min_upsampling(input_value, width));
+			return Pooling<T>::backward(delta.upsampling(input_value, width));
 		}
 	};
 
@@ -271,10 +252,43 @@ namespace layers {
 		}
 	};
 
+	// activation layer
+	template<class T>
+	class Activation {
+	private:
+		Tensor<T> grad;
+		string activation;
+	public:
+		Activation(string activation) : activation(activation) { ; }
+		virtual Tensor<T> forward(Tensor<T> &data) {
+			if (activation == "sigmoid") {
+				Tensor<T> value = data.sigmoid();
+				grad = ops::grad_sigmoid(value);
+				return value;
+			}
+			else if (activation == "relu") {
+				Tensor<T> value = data.relu();
+				grad = ops::grad_relu(data);
+				return value;
+			}
+			else if (activation == "leaky_relu") {
+				value = x.relu(x, max_value, threshold, negative_slope);
+				grad = ops::grad_relu(x, max_value, threshold, negative_slop);
+			}
+			else {
+				throw(std::exception());
+			}
+
+		}
+		virtual Tensor<T> backward(Tensor<T> &delta) {
+			return delta * grad;
+		}
+	};
+
 	template<class T>
 	class FullConnected : public Layer<T> {
 	private:
-		Tensor<T> x, w, b;
+		Tensor<T> x, weight, bias;
 		Tensor<T> grad_w, grad_b;
 	public:
 		FullConnected(int n_output) : Layer<T>() {
@@ -283,38 +297,41 @@ namespace layers {
 		virtual void setInput(Layer<T> *input) {
 			Layer<T>::setInput(input);
 			Shape input_shape = input->getShape();
-			shape.set(NULL, NULL, input_shape[3], shape[3]);
-			w = Tensor<T>(1, 1, input_shape[3], shape[3]);
-			b = Tensor<T>(1, 1, 1, shape[3]);
+			shape.set(NULL, NULL, NULL, input_shape[3], shape[3]);
+			weight = Tensor<T>(1, 1, 1, input_shape[3], shape[3]);
+			bias = Tensor<T>(1, 1, 1, 1, shape[3]);
 		}
 		virtual Tensor<T> forward(Tensor<T> data) {
 			x = Layer<T>::forward(data);
-			return x.matmul(w) + b;// TODO: matrix+vector
+			return x.matmul(weight) + bias;// TODO: matrix+vector
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {
 			grad_w = x.Transpose().matmul(delta);
 			grad_b = delta.reduce_sum(0);
-			return Layer<T>::backward(delta.matmul(w.Transpose()));
+			return Layer<T>::backward(delta.matmul(weight.Transpose()));
 		}
-		virtual void update() {
-			Layer<T>::update();
-			w = w - 0.01*grad_w;
-			b = b - 0.01*grad_b;
+		virtual void get_variables(Map &variable) {
+			variable["fc:weight"] = &weight;
+			variable["fc:bias"] = &bias;
+		}
+		virtual void get_gradients(Map &gradients) {
+			gradients["fc:weight"] = &grad_w;
+			gradients["fc:bias"] = &grad_b;
 		}
 	};
 
 	template<class T>
 	class Loss : Layer<T> {
 	private:
-		Tensor<T> y, m_delta;
+		Tensor<T> loss, y, m_delta;
 	public:
 		Loss(Layer<T> *input, Tensor<T> y) :Layer<T>(input), y(y) { ; }
 		double getLossValue() {
-			return value.data[0][0];
+			return value.;
 		}
 		virtual Tensor<T> forward(Tensor<T> &data) {
 			Tensor<T> x = Layer<T>::forward(data);
-			value = ops::mse(x, y);
+			loss = ops::mse(x, y);
 			m_delta = x - y;
 		}
 		virtual Tensor<T> backward(Tensor<T> &delta) {

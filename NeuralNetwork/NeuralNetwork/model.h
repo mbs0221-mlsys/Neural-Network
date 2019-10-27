@@ -33,6 +33,17 @@ namespace model {
 				layers[i]->setInput(layers[i - 1]);// 建立链接关系
 			}
 		}
+	protected:
+		virtual void get_variables(Map &variable) {
+			for (Layer<T> *p = output; p != nullptr; p = p->input) {
+				p->get_variables(variable);
+			}
+		}
+		virtual void get_gradients(Map &gradients) {
+			for (Layer<T> *p = output; p != nullptr; p = p->input) {
+				p->update(gradients);
+			}
+		}
 	public:
 		Model(vector<Layer<T>*> &layers) : Layer<T>(NULL) {
 			int num = layers.size();
@@ -45,6 +56,8 @@ namespace model {
 			this->optimizer = optimizer;
 		}
 		void train(Tensor<T> &x, Tensor<T> &y) {
+			Map<T> variable, gradients;
+			get_variables(variable);// collect variables
 			for (int i = 0; i < 100; i++) {
 				
 				Tensor<T> y_ = forward(x);
@@ -55,7 +68,7 @@ namespace model {
 				
 				Tensor<T> delta_b = backward(delta);
 
-				update();
+				get_gradients(gradients);// collect gradients
 			}
 			printf("training finished");
 		}
@@ -72,11 +85,6 @@ namespace model {
 		virtual Tensor<T> backward(Tensor<T> &delta) {
 			// 对于Model类，先执行output的backward方法，再执行父类的forward方法；
 			return Layer<T>::backward(output->backward(delta));
-		}
-		virtual void update() {
-			for (Layer<T> *p = output; p != nullptr; p = p->input) {
-				p->update();
-			}
 		}
 	};
 
@@ -111,8 +119,8 @@ namespace model {
 					for (int start = 0; start < num_samples; start += batch_size) {
 						int end = start + batch_size;
 						end = min(end, num_samples);
-						Tensor<T> X0 = x_train.slice(start, end, 0);
-						Tensor<T> Y0 = y_train.slice(start, end, 0);
+						Tensor<T> X0 = x_train.slice(start, end, 1);
+						Tensor<T> Y0 = y_train.slice(start, end, 1);
 
 						// 正向传播
 						Tensor<T> T0 = X0.matmul(weights["w0"]).add(weights["b0"]);
@@ -207,16 +215,14 @@ namespace model {
 		template<class T>
 		Model<T>* create_fc_network() {
 
-			int size[] = { NULL, NULL, NULL, 13 };
+			int size[] = { NULL, NULL, 28, 28, 3 };
 
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
-			layers.push_back(new MaxPooling<T>(2));
-			layers.push_back(new MinPooling<T>(2));
-			layers.push_back(new AvgPooling<T>(2));
+			layers.push_back(new Conv2D(3, 0, 4, 96));// width=3, pad=0, stride=4, n_filters=96
+			layers.push_back(new MaxPooling<T>(5)); // width=5
 			layers.push_back(new Flatten<T>());
-			layers.push_back(new FullConnected<T>(11, "sigmoid"));
-			layers.push_back(new FullConnected<T>(3, "sigmoid"));
+			layers.push_back(new FullConnected<T>(10, "sigmoid"));
 			
 			return new Model<T>(layers);
 		}
@@ -225,10 +231,10 @@ namespace model {
 		void test(Tensor<T> &x_train, Tensor<T> &y_train, Tensor<T> &x_test) {
 
 			printf("fc_network::test()\n");
-			int size[] = { 1, 178, 3, 4 };
+			int size[] = { 500, 1, 28, 28, 3 };
 			Model<T> *fc_network = create_fc_network<T>();
 			fc_network->compile(std::string("least_squares"), Optimizer<T>(0.9));
-			Tensor<T> x = x_train.slice(0, 12, 3).reshape(size);
+			Tensor<T> x = x_train.slice(0, 500, 1).reshape(size);
 			Tensor<T> y = y_train.one_hot(3);
 			fc_network->train(x, y);
 		}

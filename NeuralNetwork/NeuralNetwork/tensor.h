@@ -156,11 +156,7 @@ namespace tensor {
 		// pooling/upsampling
 		inline Tensor<T> __pooling_(int width, T (*func)(T, T)) {
 			// 2d pooling (MAX, MIN, AVG)
-			int size[] = {
-				shape[0], shape[1],
-				shape[2] / width, shape[3] / width,
-				shape[4]
-			};
+			int size[] = { shape[0], shape[1],	shape[2] / width, shape[3] / width,	shape[4] };
 			Tensor<T> out = Tensor<T>::zeros(Shape(size));
 			out.foreach_assign([&](int oi, int oj, int ok, int ol, int om) {
 				// find (MAX, MIN) in input region (oj, ok)
@@ -608,7 +604,7 @@ namespace tensor {
 			return out;
 		}
 
-		// upsampling ref:
+		// upsampling
 		Tensor<T> upsampling(Tensor<T> &input, int width) {
 			// 2d up_sampling (MAX, MIN)  https://www.cnblogs.com/pinard/p/6494810.html#!comments
 			Tensor<T> out = Tensor<T>::zeros(input.getShape());

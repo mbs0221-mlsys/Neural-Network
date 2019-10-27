@@ -1,6 +1,5 @@
 #include "tensor.h"
 
-
 using namespace std;
 using namespace shape;
 using namespace tensor;
