@@ -3,59 +3,15 @@
 #ifndef _OPS_
 #define _OPS_
 
+#include <list>
+
 #include "tensor.h"
 
 namespace ops {
 
+	using namespace std;
 	using namespace tensor;
-
-	template<class T>
-	class MetaFunction {
-	private:
-		T(*primary)();
-		T(*dual)();
-	public:
-		MetaFunction(T(*primary)(T), T(*dual)(T))
-			: primary(primary), dual(dual) {
-		}
-		void calculate(T t) {
-			primary(t);
-			dual(t);
-		}
-		static MetaFunction<T> sigmoid;
-		static MetaFunction<T> relu;
-	};
-
-	template<class T>
-	MetaFunction<T> MetaFunction<T>::sigmoid = MetaFunction<T> {
-		.primary = __sigmoid_,
-		.dual = __sigmoid_grad_
-	};
-
-	template<class T>
-	MetaFunction<T> MetaFunction<T>::relu = MetaFunction<T> {
-		.primary = __relu_,
-		.dual = __relu_grad_
-	};
-
-	namespace conv {
-
-		template<class T>
-		Tensor<T>& conv3d(Tensor<T> input, Tensor<T> kernel, int padding = 0) {
-			Shape spi = input.getShape();
-			Shape spk = kernel.getShape();
-			int sz[] = { spi[0], spi[1] - spk[1] + 1, spi[2] - spk[2] + 1, spi[3] };
-			Shape shape(sz);
-			Tensor<T> output(shape);
-			for (int i = 0; i < spi[0]; i++) {
-				__conv3d_(output[i], input, kernel);
-			}
-			return output;
-		}
-	}
-
-	using namespace tensor;
-
+	
 	template<class T>
 	Tensor<T> dropout(Tensor<T> &x, double rate) {
 		Tensor<T> w = Tensor<T>::mask(x.shape(), 0.1);

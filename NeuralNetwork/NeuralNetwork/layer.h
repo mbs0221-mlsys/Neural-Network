@@ -15,8 +15,7 @@ namespace layers {
 	using namespace ops;
 	
 	//----------------------------------------ABSTRACT LAYER DEFINATION-------
-	template<class T>
-	typedef map<string, Tensor<T>*> Map;
+	typedef map<string, Tensor<double>*> Map;
 
 	template<class T>
 	class Layer {

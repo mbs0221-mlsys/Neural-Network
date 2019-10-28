@@ -127,6 +127,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="graph.h" />
     <ClInclude Include="image.h" />
     <ClInclude Include="layer.h" />
     <ClInclude Include="model.h" />
