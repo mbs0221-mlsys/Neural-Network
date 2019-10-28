@@ -373,6 +373,16 @@ namespace tensor {
 			int N = shape[axis];
 			return out / N;
 		}
+		Tensor<T> reduce_mean() {
+			Shape shape_out(1, 1, 1, 1, 1);
+			Tensor<T> out = Tensor<T>::zeros(shape_out);
+			T value = 0;
+			foreach_elem([&](int i) {
+				value += data[i];
+			});
+			out.set(value, 0);
+			return out;
+		}
 
 	public: // scalar operator
 		Tensor<T> operator +(T b) { return __foreach_elem_assign_([&](T x) { return x + b; }); }
@@ -637,7 +647,7 @@ namespace tensor {
 	public:
 		// math function
 		Tensor<T> softmax() { 
-			Tensor<T> sum_e = exp().reduce_sum(1); 
+			Tensor<T> sum_e = exp().reduce_sum(4); 
 			return (*this) / sum_e; 
 		}
 		Tensor<T> sigmoid() {

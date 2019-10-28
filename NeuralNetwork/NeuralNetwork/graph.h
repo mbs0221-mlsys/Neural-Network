@@ -280,7 +280,41 @@ namespace AutoGrad {
 		}
 	};
 
+	template<class T>
+	class Softmax : public Operation<T> {
+	public:
+		Softmax(Node<T> x) : Operation<T>({ }) { ; }
+		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
+			Tensor<T> x = inputs[0];
+			return x.softmax();
+		}
+	};
 
+	template<class T>
+	class MSE : public Operation<T> {
+	public:
+		MSE(Node<T> *output, Node<T> *target)
+			: Operation<T>({ output, target }) { ; }
+		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
+			Tensor<T> y_ = inputs[0];
+			Tensor<T> y = inputs[1];
+			Tensor<T> error = (y_ - y).pow(2);
+			return error.reduce_mean();
+		}
+	};
+
+	template<class T>
+	class CrossEntrpy : public Operation<T> {
+	public:
+		CrossEntrpy(Node<T> *output, Node<T> *target)
+			: Operation<T>({ output, target }) { ; }
+		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
+			Tensor<T> y_ = inputs[0];
+			Tensor<T> y = inputs[1];
+			Tensor<T> error = ((T)0.0f - (y*y_.log() + ((T)1.0f - y)*((T)1.0f - y_).log()));
+			return error.reduce_mean();
+		}
+	};
 	//----------------------------------------COMPUTATIONAL GRAPH-------------------
 
 	template<class T>
@@ -416,6 +450,21 @@ namespace AutoGrad {
 		}
 
 		template<class T>
+		Operation<T>* softmax(Node<T> *x) {
+			return new Softmax<T>(x);
+		}
+
+		template<class T>
+		Operation<T>* mse(Node<T> *x, Node<T> *y) {
+			return new MSE<T>(x, y);
+		}
+
+		template<class T>
+		Operation<T>* cross_entopy(Node<T> *y_, Node<T> *y) {
+			return new CrossEntrpy<T>(y_, y);
+		}
+
+		template<class T>
 		void test() {
 			
 			Shape input_shape(NULL, 1, 28, 28, 3);
@@ -424,29 +473,32 @@ namespace AutoGrad {
 			Placeholder<T> *x = new Placeholder<T>(input_shape);
 			Placeholder<T> *y = new Placeholder<T>(output_shape);
 			
-			map<Placeholder<T>*, Tensor<T>> feed_dict;
-			feed_dict[x] = Tensor<T>(1, 1000, 28, 28, 3);
-			feed_dict[y] = Tensor<T>(1, 1, 1, 1000, 10);
-
-			Operation<T> *net = conv2d(x, 3, 1, 1, 10);
+			Operation<T> *net;
 			// conv1
-			net = conv2d(net, 3, 1, 1, 10);
+			net = conv2d(x, 3, 1, 1, 10);
 			net = maxpooling(net, 3);
-			net = sigmoid(net);
+			net = relu(net);
 			// conv2
 			net = conv2d(net, 3, 1, 1, 10);
 			net = maxpooling(net, 3);
-			net = sigmoid(net);
+			net = relu(net);
 			// conv3
 			net = conv2d(net, 3, 1, 1, 10);
 			net = maxpooling(net, 3);
-			net = sigmoid(net);
+			net = relu(net);
 			// fc_layer
 			net = flatten(net);
 			net = full_connect(net, 10);
 			net = sigmoid(net);
+			net = softmax(net);
+			
+			Operation<T> loss = cross_entopy(net, y);
+			Session<T> session(loss);
 
-			Session<T> session(net);
+			map<Placeholder<T>*, Tensor<T>> feed_dict;
+			feed_dict[x] = Tensor<T>(1, 1000, 28, 28, 3);
+			feed_dict[y] = Tensor<T>(1, 1, 1, 1000, 10);
+
 			session.run(feed_dict);
 		}
 	}
