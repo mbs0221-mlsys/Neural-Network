@@ -532,6 +532,41 @@ namespace tensor {
 #endif // DEBUG
 			return out;
 		}
+		Tensor<T> conv2d(Tensor<T> &filter, int stride) {
+
+			// output shape (n_samples, 1, width, height, channel)
+			Shape filter_shape = filter.getShape();
+			int n_samples = shape[0];
+			int n_frames = shape[1];
+			int width = (shape[2] - filter_shape[2]) / stride + 1;
+			int height = (shape[3] - filter_shape[3]) / stride + 1;
+			int n_channels = filter_shape[0];// number of channels
+			Shape output_shape(n_samples, n_frames, width, height, n_channels);
+
+			// for unit test
+			int before[] = { 0, 1, 4, 2, 3 };
+			int count = filter_shape[1] * filter_shape[2] * filter_shape[3] * filter_shape[4];
+
+			// calculate 2d concolution
+			std::vector<T> list;
+			Tensor<T> out = Tensor<T>::zeros(output_shape);
+			out.foreach([&](int oi, int oj, int ok, int ol, int om) {
+				if (om == 0) {
+					// (1, frame, width, height, channel)		
+					filter.foreach([&](int ki, int kj, int kk, int kl, int km) {
+						T a = this->at(oi, oj, ok*stride + kk, ol*stride + kl, km);
+						T b = filter.at(ki, kj, kk, kl, km);
+						list.push_back(a * b);
+						if (list.size() == count) {
+							T value = accumulate(list.begin(), list.end(), 0);
+							out.set(value, oi, oj, ok, ol, ki);
+							list.clear();
+						}
+					});
+				}
+			});
+			return out;
+		}
 		Tensor<T> conv3d(Tensor<T> &filter, Tensor<T> &bias, int stride) {
 			Shape filter_shape = filter.getShape();
 
@@ -779,6 +814,13 @@ namespace tensor {
 		}
 
 		// static method
+		static Tensor<T> random(Shape &shape, T value) {
+			Tensor<T> out(shape);
+			out.foreach_elem_assign([&](int i) {
+				return RANDOM;
+			});
+			return out;
+		}
 		static Tensor<T> numbers(Shape &shape, T value) {
 			Tensor<T> out(shape);
 			out.foreach_elem_assign([&](int i) {
