@@ -188,10 +188,12 @@ namespace tensor {
 		Tensor(Shape &shape) : shape(shape) {
 			__allocate_();
 		}
-		Tensor(Tensor<T> &tensor) : shape(tensor.getShape()) {
+		Tensor(Tensor<T> &tensor) {
+			shape = tensor.getShape();
 			__allocate_();
-			foreach_assign([&](int i, int j, int k, int l, int m) {
-				return tensor.at(i, j, k, l, m);
+			tensor.foreach([&](int i, int j, int k, int l, int m) {
+				T value = tensor.at(i, j, k, l, m);
+				this->set(value, i, j, k, l, m);
 			});
 		}
 		~Tensor() {
