@@ -139,8 +139,8 @@ namespace AutoGrad {
 		virtual void build(Shape &input_shape) {
 			Shape kernel_shape(n_filters, input_shape[1], width, width, input_shape[4]);
 			Shape bias_shape(1, 1, 1, 1, n_filters);
-			addWeight("kernel", kernel_shape);
-			addWeight("bias", bias_shape);
+			add_weight("kernel", kernel_shape);
+			add_weight("bias", bias_shape);
 		}
 	};
 
@@ -247,7 +247,31 @@ namespace AutoGrad {
 			return delta.avg_upsampling(width);	
 		}
 	};
-
+	//----------------------------------------RNN CELL------------------------------
+	template<class T>
+	class RNNCell : public Operation<T> {
+	private:
+	public:
+		RNNCell(Node<T> *x, Node<T> *state) : Operation<T>({ x, state }) { ; }
+		virtual void build(Shape &input_shape) {
+			// needing debug
+			Shape U_shape(1, 1, 1, input_shape[4], input_shape[4]);
+			Shape b_shape(1, 1, 1, 1, input_shape[4]);
+			add_weight("U", U_shape); add_weight("W", U_shape);
+			add_weight("b", b_shape); add_weight("V", U_shape);
+			add_weight("c", b_shape);
+		}
+		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
+			// needing debug
+			Tensor<T> x, s0, U, W, b, V, c, ot;
+			x = inputs[0]; s0 = inputs[1];
+			U = inputs[2]; W = inputs[3]; b = inputs[4];
+			V = inputs[5]; c = inputs[6];
+			s1 = ops::sigmoid(U.matmul(x) + W.matmul(s0) + b);
+			ot = V.matmul(s1) + c;
+			return y_t = ot.softmax();
+		}
+	};
 
 	//----------------------------------------FLATTEN OPERATION---------------------
 
@@ -296,8 +320,8 @@ namespace AutoGrad {
 		virtual void build(Shape &input_shape) {
 			Shape weight_shape(1, 1, 1, input_shape[4], n_outputs);
 			Shape bias_shape(1, 1, 1, 1, n_outputs);
-			addWeight("weight", weight_shape, true);
-			addWeight("bias", bias_shape, true);
+			add_weight("weight", weight_shape, true);
+			add_weight("bias", bias_shape, true);
 		}
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			Tensor<T> x = inputs[0];
