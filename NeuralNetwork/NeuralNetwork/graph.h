@@ -15,9 +15,9 @@ namespace AutoGrad {
 	template<class T>
 	class Node {
 	private:
-		Tensor<T> output;// 输入值
+		Tensor<T> output;// every node has an output
 	protected:
-		vector<Node*> consumers;// 消费者
+		vector<Node*> consumers;// the consummer of this node
 	public:
 		Node() {  }
 		void getOuput() { return this->output; }
@@ -50,6 +50,9 @@ namespace AutoGrad {
 		}
 		virtual NodeType getNodeType() { return VARIABLE; }
 		Tensor<T> getValue() { return value; }
+		void update(Tensor<T> delta){
+			this->grad = delta;
+		}
 		virtual Tensor<T> backward() {
 			grad = Node<T>::backward();
 		}
@@ -158,9 +161,10 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			Tensor<T> filter = inputs[1];
 			Tensor<T> bias = inputs[2];
-			// grad.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3);// bias
-			// x.conv2d(grad, stride);// filter
-			return grad.padding(width).conv2d(filter.rotate180(), stride);// delta
+			// pass the delta to the filter and bias
+			((Variable<T>*)input_ndoes[1])->update(x.conv2d(grad, stride));
+			((Variable<T>*)input_nodes[2])->update(grad.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3));
+			return grad.padding(width).conv2d(filter.rotate180(), stride);
 		}
 	};
 
@@ -181,9 +185,10 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			Tensor<T> filter = inputs[1];
 			Tensor<T> bias = inputs[2];
-			// grad.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3);// bias
-			// x.conv2d(grad, stride);// filter
-			return grad.padding(width).conv2d(filter.rotate180(), stride);// delta
+			// pass the delta to the flter and bias
+			((Variable<T>*)input_nodes[1])->update(grad.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3));
+			((Variable<T>*)input_nodes[2])->update(x.conv2d(grad, stride));
+			return grad.padding(width).conv2d(filter.rotate180(), stride);
 		}
 	};
 
@@ -207,6 +212,11 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			return x.max_pooling(width);
 		}
+		virtual Tensor<T> backward(){
+			Tensor<T> delta = Node<T>::backward();
+			vector<Tensor<T>> inputs = getInputValues();
+			return delta.upsampling(inputs[0], width);
+		}
 	};
 
 	template<class T>
@@ -217,6 +227,11 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			return x.min_pooling(width);
 		}
+		virtual Tensor<T> backward(){
+			Tensor<T> delta = Node<T>::backward();
+			vector<Tensor<T>> inputs = getInputValues();
+			return delta.upsampling(inputs[0], width); 
+		}
 	};
 
 	template<class T>
@@ -226,6 +241,10 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			Tensor<T> x = inputs[0];
 			return x.avg_pooling(width);
+		}
+		virtual Tensor<T> backward(){
+			Tensor<T> delta = Node<T>::backward();
+			return delta.avg_upsampling(width);	
 		}
 	};
 
@@ -244,6 +263,10 @@ namespace AutoGrad {
 			input_shape = x.getShape();
 			return x.reshape(output_shape);
 		}
+		virtual Tensor<T> backward(){
+			Tensor<T> delta = Node<T>::backward();
+			return delta.reshape(input_shape);
+		}
 	};
 
 	template<class T>
@@ -256,6 +279,10 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			before = x.getShape();
 			return x.flatten();
+		}
+		virtual Tensor<T> backward(){
+			Tensor<T> delta = Node<T>::backward();
+			return delta.reshape(before);
 		}
 	};
 
@@ -277,6 +304,13 @@ namespace AutoGrad {
 			Tensor<T> w = inputs[1];
 			Tensor<T> b = inputs[2];
 			return  x.matmul(w).add(b);
+		}
+		virtual Tensor<T> backward(){	
+			Tensor<T> delta = Node<T>::backward();
+			// calculate the delta of the weight and bias
+			((Variable<T>*)input_nodes[1])->update(x.Transpose().matmul(delta));
+			((Variable<T>*)input_nodes[2])->update(delta.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3));
+			return delta.matmul(w.Transpose());
 		}
 	};
 
