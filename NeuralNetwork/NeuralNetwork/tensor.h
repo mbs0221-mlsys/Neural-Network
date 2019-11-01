@@ -814,7 +814,7 @@ namespace tensor {
 		}
 
 		// static method
-		static Tensor<T> random(Shape &shape, T value) {
+		static Tensor<T> random(Shape &shape) {
 			Tensor<T> out(shape);
 			out.foreach_elem_assign([&](int i) {
 				return RANDOM;
