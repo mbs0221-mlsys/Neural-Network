@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
 
 	//model::test<double>();
 	
-	AutoGrad::layers::test<double>();
+	AutoGrad::test<double>();
 
 	getchar();
 

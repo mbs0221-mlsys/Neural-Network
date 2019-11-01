@@ -107,7 +107,6 @@ namespace layers {
 			: Convolution<T>(width, padding, stride, n_filters, activation) { ; }
 		virtual void setInput(Layer<T> *input) {
 			Convolution<T>::setInput(input);
-
 			Shape input_shape = input->getShape();
 			Shape filter_shape = filter.getShape();
 			filter_shape.set(input_shape[1], 1);
@@ -275,12 +274,12 @@ namespace layers {
 	};
 
 	template<class T>
-	class FullConnected : public Layer<T> {
+	class FullyConnected : public Layer<T> {
 	private:
 		Tensor<T> x, weight, bias;
 		Tensor<T> grad_w, grad_b;
 	public:
-		FullConnected(int n_output) : Layer<T>() {
+		FullyConnected(int n_output) : Layer<T>() {
 			shape.setDims(n_output, 3);
 		}
 		virtual void setInput(Layer<T> *input) {

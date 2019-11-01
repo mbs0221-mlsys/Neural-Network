@@ -222,7 +222,7 @@ namespace model {
 			layers.push_back(new Conv2D(3, 0, 4, 96));// width=3, pad=0, stride=4, n_filters=96
 			layers.push_back(new MaxPooling<T>(5)); // width=5
 			layers.push_back(new Flatten<T>());
-			layers.push_back(new FullConnected<T>(10, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(10, "sigmoid"));
 			
 			return new Model<T>(layers);
 		}
@@ -249,11 +249,11 @@ namespace model {
 
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));// value
-			layers.push_back(new FullConnected<T>(11, "sigmoid"));
-			layers.push_back(new FullConnected<T>(9, "sigmoid"));
-			layers.push_back(new FullConnected<T>(7, "sigmoid"));
-			layers.push_back(new FullConnected<T>(5, "sigmoid"));
-			layers.push_back(new FullConnected<T>(3, "sigmoid"));// calculate
+			layers.push_back(new FullyConnected<T>(11, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(9, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(7, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(5, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(3, "sigmoid"));// calculate
 
 			return new Model<T>(layers);
 		}
@@ -265,11 +265,11 @@ namespace model {
 			
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
-			layers.push_back(new FullConnected<T>(5, "sigmoid"));
-			layers.push_back(new FullConnected<T>(7, "sigmoid"));
-			layers.push_back(new FullConnected<T>(9, "sigmoid"));
-			layers.push_back(new FullConnected<T>(11, "sigmoid"));
-			layers.push_back(new FullConnected<T>(13, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(5, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(7, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(9, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(11, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(13, "sigmoid"));
 			
 			return new Model<T>(layers);
 		}
@@ -309,11 +309,11 @@ namespace model {
 
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
-			layers.push_back(new FullConnected<T>(5, "sigmoid"));
-			layers.push_back(new FullConnected<T>(7, "sigmoid"));
-			layers.push_back(new FullConnected<T>(9, "sigmoid"));
-			layers.push_back(new FullConnected<T>(11, "sigmoid"));
-			layers.push_back(new FullConnected<T>(13, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(5, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(7, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(9, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(11, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(13, "sigmoid"));
 
 			return new Model<T>(layers);
 		}
@@ -325,11 +325,11 @@ namespace model {
 
 			vector<Layer<T>*> layers;
 			layers.push_back(new Input<T>(size));
-			layers.push_back(new FullConnected<T>(11, "sigmoid"));
-			layers.push_back(new FullConnected<T>(9, "sigmoid"));
-			layers.push_back(new FullConnected<T>(7, "sigmoid"));
-			layers.push_back(new FullConnected<T>(5, "sigmoid"));
-			layers.push_back(new FullConnected<T>(1, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(11, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(9, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(7, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(5, "sigmoid"));
+			layers.push_back(new FullyConnected<T>(1, "sigmoid"));
 
 			return new Model<T>(layers);
 		}

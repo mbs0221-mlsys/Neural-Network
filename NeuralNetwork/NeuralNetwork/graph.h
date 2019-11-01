@@ -16,13 +16,13 @@ namespace AutoGrad {
 	template<class T>
 	class Node {
 	private:
-		Tensor<T> output;// every node has an output
+		Tensor<T> value;// every node has an output
 	public:
 		vector<Node*> consumers;// the consummer of this node
 		Node() {  }
 		void addInput() {}
-		Tensor<T> getOutput() { return this->output; }
-		void setOutput(Tensor<T> &output) { this->output = output; }
+		Tensor<T> getValue() { return value; }
+		void setValue(Tensor<T> &value) { this->value = value; }
 		virtual NodeType getNodeType() = 0;
 		virtual Tensor<T> backward() {
 			// collect updates from consumers
@@ -32,7 +32,7 @@ namespace AutoGrad {
 				deltas.push_back(delta);
 			}
 			// accumulates all deltas
-			Tensor<T> value = Tensor<T>::zeros(output.getShape());
+			Tensor<T> value = Tensor<T>::zeros(value.getShape());
 			Tensor<T> delta = accumulate(deltas.begin(), deltas.end(), value);
 			return delta;
 		}
@@ -43,7 +43,7 @@ namespace AutoGrad {
 	private:
 		string name;
 		bool require_grad;
-		Tensor<T> value, grad;
+		Tensor<T> grad;
 	public:
 		Variable(Tensor<T> &tensor, bool require_grad = true) 
 			:value(tensor), require_grad(require_grad) { ; }
@@ -53,7 +53,6 @@ namespace AutoGrad {
 			grad = Tensor<T>::zeros(shape);
 		}
 		virtual NodeType getNodeType() { return VARIABLE; }
-		Tensor<T> getValue() { return value; }
 		void update(Tensor<T> delta){
 			this->grad = delta;
 		}
@@ -78,8 +77,7 @@ namespace AutoGrad {
 			input_nodes.push_back(new Variable<T>(name, shape, trainable));
 		}
 	public:
-		// only operation has inputs
-		vector<Node<T>*> input_nodes;
+		vector<Node<T>*> input_nodes; // only operation has inputs
 		Operation(initializer_list<Node<T>*> inputs) {
 			// add input nodes
 			for (auto nodes : inputs) {
@@ -93,7 +91,7 @@ namespace AutoGrad {
 		}
 		virtual void build(Shape &input_shape) { ; }
 		Tensor<T> getInput(int i) {
-			return input_nodes[i].getOutput();
+			return input_nodes[i]->getOutput();
 		}
 		vector<Tensor<T>> getInputs() {
 			vector<Tensor<T>> inputs;
@@ -104,7 +102,7 @@ namespace AutoGrad {
 			return inputs;
 		}
 		virtual NodeType getNodeType() { return OPERATION; }
-		virtual Tensor<T> compute() { ; }
+		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) { ; }
 	};
 
 
@@ -138,10 +136,7 @@ namespace AutoGrad {
 	template<class T>
 	class Convolution : public Operation<T> {
 	protected:
-		int width;
-		int n_filters;
-		int padding;
-		int stride;
+		int width, n_filters, padding, stride;
 	public:
 		Convolution(Node<T> *x, int width, int padding, int stride, int n_filters)
 			: Operation<T>({ x }), width(width), padding(padding), stride(stride), n_filters(n_filters) { ; }
@@ -278,7 +273,7 @@ namespace AutoGrad {
 	private:
 		Shape input_shape, output_shape;
 	public:
-		Reshape(Node *x, Shape &output_shape)
+		Reshape(Node<T> *x, Shape &output_shape)
 			: Operation<T>({ x }), output_shape(output_shape) { ; }
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			Tensor<T> input = inputs[0];
@@ -296,7 +291,7 @@ namespace AutoGrad {
 	private:
 		Shape before;
 	public:
-		Flatten(Node *x) : Operation<T>({ x }) { ; }
+		Flatten(Node<T> *x) : Operation<T>({ x }) { ; }
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			Tensor<T> x = inputs[0];
 			before = x.getShape();
@@ -309,11 +304,11 @@ namespace AutoGrad {
 	};
 
 	template<class T>
-	class FullConnected : public Operation<T> {
+	class FullyConnected : public Operation<T> {
 	private:
 		int n_outputs;
 	public:
-		FullConnected(Node *x, int n_outputs) 
+		FullyConnected(Node<T> *x, int n_outputs)
 			: Operation<T>({ x }), n_outputs(n_outputs) { ; }
 		virtual void build(Shape &input_shape) {
 			Shape weight_shape(1, 1, 1, input_shape[4], n_outputs);
@@ -441,15 +436,29 @@ namespace AutoGrad {
 	template<class T>
 	class Graph {
 	private:
-		vector<Node<T>*> placeholders;
-		vector<Node<T>*> variables;
-		vector<Node<T>*> operations;
+		vector<Placeholder<T>*> placeholders;
+		vector<Variable<T>*> variables;
+		vector<Operation<T>*> operations;
 	public:
 		Graph() { ; }
 		~Graph() { 
 			placeholders.clear();
 			variables.clear();
 			operations.clear();
+		}
+		void init_variables() {
+			vector<Variable<T>*>::iterator iter;
+			for (iter = variables.begin(); iter != variables.end(); iter++) {
+				Variable<T>* node = (Variable<T>*)(*iter);
+				node->setValue(node->getValue());
+			}
+		}
+		void feed_dict(map<Placeholder<T>*, Tensor<T>> &feed_dict) {
+			vector<Placeholder<T>*>::iterator iter;
+			for (iter = placeholders.begin(); iter != placeholders.end(); iter++) {
+				Placeholder<T>* node = (Placeholder<T>*)(*iter);
+				node->setValue(feed_dict[node]);
+			}
 		}
 		void collect(Node<T> *root) {
 			if (root->getNodeType() == PLACEHOLDER) {
@@ -479,25 +488,18 @@ namespace AutoGrad {
 			graph.collect(operation);
 		}
 		void run(map<Placeholder<T>*, Tensor<T>> &feed_dict) {
-			vector<Node<T>*> operations = graph.getOperations();
-			vector<Node<T>*>::iterator iter;
+			graph.init_variables();
+			graph.feed_dict(feed_dict);
+			vector<Operation<T>*> operations = graph.getOperations();
+			vector<Operation<T>*>::iterator iter;
 			for (iter = operations.begin(); iter != operations.end(); iter++) {
-				Node<T>* node = (*iter);
-				switch (node->getNodeType()) {
-				case PLACEHOLDER:
-					node->setOutput(feed_dict[(Placeholder<T>*)node]);
-					break;
-				case VARIABLE:
-					node->setOutput(((Variable<T>*)node)->getValue());
-					break;
-				case OPERATION:
-					node->setOutput(((Operation<T>*)node)->compute();
-					break;
-				default:
-					cout << "Wrong Node Type" << endl;
-					break;
-				}
+				Operation<T>* node = (*iter);
+				node->setValue(node->compute(node->getInputs()));
 			}
+		}
+		void backward() {
+			vector<Node<T>*> operations = graph.getOperations();
+			vector<Node<T>*> reverse_order = reverse(operations.begin(), operations.end());
 		}
 	};
 
@@ -533,14 +535,14 @@ namespace AutoGrad {
 
 		template<class T>
 		Operation<T>* activation_func(Node<T> *x, string &func,...) {
-			va_list args;
-			va_start(args, func);
-			if (func == "leaky_relu") {
-				T max_value = va_arg(args, T);
-				T threshold = va_arg(args, T);
-				T negative_slop = va_arg(args, T);
-				return leaky_relu(x, max_value, threshold, negative_slop);
-			}
+			//va_list args;
+			//va_start(args, func);
+			//if (func == "leaky_relu") {
+			//	T max_value = va_arg(args, T);
+			//	T threshold = va_arg(args, T);
+			//	T negative_slop = va_arg(args, T);
+			//	return leaky_relu(x, max_value, threshold, negative_slop);
+			//}
 			if (func == "relu")
 				return relu(x);
 			if (func == "sigmoid")
@@ -590,8 +592,9 @@ namespace AutoGrad {
 		}
 	
 		template<class T>
-		Operation<T>* full_connect(Node<T> *x, int n_outputs) {
-			return new FullConnected<T>(x, n_outputs);
+		Operation<T>* fully_connected(Node<T> *x, int n_outputs, string activation="sigmoid") {
+			Operation<T>* res = new FullyConnected<T>(x, n_outputs);
+			return activation_func(res, activation);
 		}
 
 		template<class T>
@@ -609,39 +612,41 @@ namespace AutoGrad {
 			return new CrossEntrpy<T>(y_, y);
 		}
 
-		template<class T>
-		void test() {
-			
-			Shape input_shape(NULL, 1, 28, 28, 3);
-			Shape output_shape(NULL, 1, 1, 1, 10);
-			
-			Placeholder<T> *x = new Placeholder<T>(input_shape);
-			Placeholder<T> *y = new Placeholder<T>(output_shape);
-			
-			Operation<T> *net;
-			// conv1
-			net = conv2d(x, 3, 1, 1, 10);
-			net = maxpooling(net, 3);
-			// conv2
-			net = conv2d(net, 3, 1, 1, 10);
-			net = maxpooling(net, 3);
-			// conv3
-			net = conv2d(net, 3, 1, 1, 10);
-			net = maxpooling(net, 3);
-			// fc_layer
-			net = flatten(net);
-			net = full_connect(net, 10);
-			net = sigmoid(net);
-			net = softmax(net);
-			
-			Operation<T> *loss = cross_entopy(net, y);
-			Session<T> session(loss);
+	}
 
-			map<Placeholder<T>*, Tensor<T>> feed_dict;
-			feed_dict[x] = Tensor<T>(1, 1000, 28, 28, 3);
-			feed_dict[y] = Tensor<T>(1, 1, 1, 1000, 10);
+	template<class T>
+	void test() {
 
-			session.run(feed_dict);
-		}
+		using namespace layers;
+
+		Shape input_shape(NULL, 1, 28, 28, 3);
+		Shape output_shape(NULL, 1, 1, 1, 10);
+
+		Placeholder<T> *x = new Placeholder<T>(input_shape);
+		Placeholder<T> *y = new Placeholder<T>(output_shape);
+
+		Operation<T> *net;
+		// conv1
+		net = conv2d(x, 3, 1, 1, 10);
+		net = maxpooling(net, 3);
+		// conv2
+		net = conv2d(net, 3, 1, 1, 10);
+		net = maxpooling(net, 3);
+		// conv3
+		net = conv2d(net, 3, 1, 1, 10);
+		net = maxpooling(net, 3);
+		// fc_layer
+		net = flatten(net);
+		net = fully_connected(net, 10);
+		net = softmax(net);
+
+		Operation<T> *loss = cross_entopy(net, y);
+		Session<T> session(loss);
+
+		//map<Placeholder<T>*, Tensor<T>> feed_dict;
+		//feed_dict[x] = Tensor<T>(1, 1000, 28, 28, 3);
+		//feed_dict[y] = Tensor<T>(1, 1, 1, 1000, 10);
+
+		//session.run(feed_dict);
 	}
 }

@@ -322,17 +322,17 @@ namespace tensor {
 			});
 			return out;
 		}
-		Tensor<T> flatten(int axis = 2) {
+		Tensor<T> flatten(int dim = 2) {
 			// merge last two dimensions by default
 			Shape shape_out = shape;
 			return reshape(shape_out.flatten(2));
 		}
-		Tensor<T> reduce_sum(int axis) {
+		Tensor<T> reduce_sum(int dim) {
 			// sample, frame, width(column), height(row), channel. 
 			Shape shape_out = shape;
-			shape_out.set(1, axis);
+			shape_out.set(1, dim);
 			Tensor<T> out = Tensor<T>::zeros(shape_out);
-			switch (axis) {
+			switch (dim) {
 			case 0:// samples
 				foreach([&](int i, int j, int k, int l, int m) {
 					T value = out.at(0, j, k, l, m) + this->at(i, j, k, l, m);
@@ -368,9 +368,9 @@ namespace tensor {
 			}
 			return out;
 		}
-		Tensor<T> reduce_mean(int axis) {
-			Tensor<T> out = reduce_sum(axis);
-			int N = shape[axis];
+		Tensor<T> reduce_mean(int dim) {
+			Tensor<T> out = reduce_sum(dim);
+			int N = shape[dim];
 			return out / N;
 		}
 		Tensor<T> reduce_mean() {
@@ -383,7 +383,7 @@ namespace tensor {
 			out.set(value, 0);
 			return out;
 		}
-
+		
 	public: // scalar operator
 		Tensor<T> operator +(T b) { return __foreach_elem_assign_([&](T x) { return x + b; }); }
 		Tensor<T> operator -(T b) { return __foreach_elem_assign_([&](T x) { return x - b; }); }
