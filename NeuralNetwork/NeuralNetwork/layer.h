@@ -45,8 +45,6 @@ namespace layers {
 			else
 				return delta;// 若是无输入节点，则返回
 		}
-		virtual void get_variables(Map &variable) { ; }
-		virtual void get_gradients(Map &gradients) { ; }
 	};
 	//----------------------------------------INPUT LAYER---------------------
 
@@ -96,14 +94,6 @@ namespace layers {
 		virtual Tensor<T> backward(Tensor<T> &delta) {
 			Tensor<T> m_delta = delta.clipping(padding);
 			return Layer<T>::backward(m_delta);
-		}
-		virtual void get_variables(Map &variable) {
-			variable["conv:filter"] = &filter;
-			variable["conv:bias"] = &bias;
-		}
-		virtual void get_gradients(Map &gradients) { 
-			gradients["conv:filter"] = grad_f;
-			gradients["conv:bias"] = grad_b;
 		}
 	};
 

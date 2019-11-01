@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <stdarg.h>
 
 #include "tensor.h"
 #include "ops.h"
@@ -16,12 +17,12 @@ namespace AutoGrad {
 	class Node {
 	private:
 		Tensor<T> output;// every node has an output
-	protected:
-		vector<Node*> consumers;// the consummer of this node
 	public:
+		vector<Node*> consumers;// the consummer of this node
 		Node() {  }
-		void getOuput() { return this->output; }
-		void setOutput(Tensor<T> output) { this->output = output; }
+		void addInput() {}
+		Tensor<T> getOutput() { return this->output; }
+		void setOutput(Tensor<T> &output) { this->output = output; }
 		virtual NodeType getNodeType() = 0;
 		virtual Tensor<T> backward() {
 			// collect updates from consumers
@@ -30,7 +31,8 @@ namespace AutoGrad {
 				Tensor<T> delta = consumer->backward();
 				deltas.push_back(delta);
 			}
-			// accumulates all deltas			
+			// accumulates all deltas
+			Tensor<T> value = Tensor<T>::zeros(output.getShape());
 			Tensor<T> delta = accumulate(deltas.begin(), deltas.end(), value);
 			return delta;
 		}
@@ -43,6 +45,8 @@ namespace AutoGrad {
 		Tensor<T> value, grad;
 		bool require_grad;
 	public:
+		Variable(Tensor<T> &tensor, bool require_grad = true) 
+			:value(tensor), require_grad(require_grad) { ; }
 		Variable(string name, Shape shape, bool require_grad=true)
 			: name(name), require_grad(require_grad) {
 			value = Tensor<T>::random(shape);
@@ -69,28 +73,31 @@ namespace AutoGrad {
 
 	template<class T>
 	class Operation : public Node<T> {
+	protected:
+		void add_weight(string name, Shape &shape, bool trainable = true) {
+			Variable<T> *weight = new Variable<T>(name, shape, trainable)
+				input_nodes.push_back(weight);
+		}
 	public:
 		// only operation has inputs
 		vector<Node<T>*> input_nodes;
 		Operation(initializer_list<Node<T>*> inputs) {
+			// add input nodes
 			for (auto nodes : inputs) {
 				input_nodes.push_back(nodes);
 			}
+			// consumer
 			vector<Node<T>*>::iterator iter;
 			for (iter = input_nodes.begin(); iter != input_nodes.end(); iter++) {
 				(*iter)->consumers.push_back(this);
 			}
 		}
 		virtual void build(Shape &input_shape) { ; }
-		void add_weight(string name, Shape &shape, bool trainable=true) {
-			Variable<T> *weight = new Variable<T>(name, shape, trainable)
-			input_nodes.push_back(weight);
-		}
 		vector<Tensor<T>> getInputValues() {
 			vector<Tensor<T>> inputs;
 			vector<Node<T>*>::iterator parent;
 			for (parent = input_nodes.begin(); parent != input_nodes.end(); parent++) {
-				inputs.push_back((*parent)->output);
+				inputs.push_back((*parent)->getOutput());
 			};
 			return inputs;
 		}
@@ -162,7 +169,7 @@ namespace AutoGrad {
 			Tensor<T> filter = inputs[1];
 			Tensor<T> bias = inputs[2];
 			// pass the delta to the filter and bias
-			((Variable<T>*)input_ndoes[1])->update(x.conv2d(grad, stride));
+			((Variable<T>*)input_nodes[1])->update(x.conv2d(grad, stride));
 			((Variable<T>*)input_nodes[2])->update(grad.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3));
 			return grad.padding(width).conv2d(filter.rotate180(), stride);
 		}
@@ -267,7 +274,7 @@ namespace AutoGrad {
 			x = inputs[0]; s0 = inputs[1];
 			U = inputs[2]; W = inputs[3]; b = inputs[4];
 			V = inputs[5]; c = inputs[6];
-			s1 = ops::sigmoid(U.matmul(x) + W.matmul(s0) + b);
+			s1 = ops::sigmoid(x.matmul(U) + W.matmul(s0) + b);
 			ot = V.matmul(s1) + c;
 			return y_t = ot.softmax();
 		}
@@ -329,9 +336,13 @@ namespace AutoGrad {
 			Tensor<T> b = inputs[2];
 			return  x.matmul(w).add(b);
 		}
-		virtual Tensor<T> backward(){	
+		virtual Tensor<T> backward(){
 			Tensor<T> delta = Node<T>::backward();
 			// calculate the delta of the weight and bias
+			Tensor<T> x = input_nodes[0]->getOutput();
+			Tensor<T> w = input_nodes[1]->getOutput();
+			Tensor<T> b = input_nodes[2]->getOutput();
+			// update weight delta
 			((Variable<T>*)input_nodes[1])->update(x.Transpose().matmul(delta));
 			((Variable<T>*)input_nodes[2])->update(delta.reduce_sum(0).reduce_sum(1).reduce_sum(2).reduce_sum(3));
 			return delta.matmul(w.Transpose());
@@ -345,6 +356,13 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			Tensor<T> x = inputs[0];
 			return  x.sigmoid();
+		}
+		virtual Tensor<T> backward() {
+			Tensor<T> delta = Node<T>::backward();
+			// calculate the delta of the weight and bias
+			Tensor<T> y = this->getOutput();
+			Tensor<T> e = Tensor<T>::ones(y.getShape());
+			return delta * (y * (e - y));
 		}
 	};
 
@@ -407,7 +425,9 @@ namespace AutoGrad {
 		}
 		virtual Tensor<T> backward() {
 			vector<Tensor<T>> inputs = getInputValues();
-			return inputs[0] - inputs[1];
+			Tensor<T> y_ = input_nodes[0]->getOutput();
+			Tensor<T> y = input_nodes[1]->getOutput();
+			return (y_ - y);
 		}
 	};
 
@@ -419,13 +439,13 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			Tensor<T> y_ = inputs[0];
 			Tensor<T> y = inputs[1];
-			Tensor<T> error = (0.0f - (y*y_.log() + (1.0f - y)*(1.0f - y_).log()));
+			Tensor<T> error = ((T)0.0f - (y*y_.log() + ((T)1.0f - y)*((T)1.0f - y_).log()));
 			return error.reduce_mean();
 		}
 		virtual Tensor<T> backward() {
-			vector<Tensor<T>> inputs = getInputValues();
-			Tensor<T> delta = inputs[0] - inputs[1];
-			return delta;
+			Tensor<T> y_ = input_nodes[0]->getOutput();
+			Tensor<T> y = input_nodes[1]->getOutput();
+			return (y_ - y);
 		}
 	};
 	//----------------------------------------COMPUTATIONAL GRAPH-------------------
@@ -523,13 +543,31 @@ namespace AutoGrad {
 		}
 
 		template<class T>
-		Operation<T>* conv2d(Node<T> *x, int width, int padding, int stride, int n_filters) {
-			return new Conv2D<T>(x, width, padding, stride, n_filters);
+		Operation<T>* activation(Node<T> *x, string &func,...) {
+			va_list args;
+			va_start(args, func);
+			if (func == "leaky_relu") {
+				T max_value = va_arg(args, T);
+				T threshold = va_arg(args, T);
+				T negative_slop = va_arg(args, T);
+				return leaky_relu(x, max_value, threshold, negative_slop);
+			}
+			if (func == "relu")
+				return relu(x);
+			if (func == "sigmoid")
+				return sigmoid(x);
 		}
 
 		template<class T>
-		Operation<T>* conv3d(Node<T> *x, int width, int padding, int stride, int n_filters) {
-			return new Conv3D<T>(x, width, padding, stride, n_filters);
+		Operation<T>* conv2d(Node<T> *x, int width, int padding, int stride, int n_filters, string activation) {
+			Operation<T>* res = new Conv2D<T>(x, width, padding, stride, n_filters);
+			return activation(res, activation);
+		}
+
+		template<class T>
+		Operation<T>* conv3d(Node<T> *x, int width, int padding, int stride, int n_filters, string activation) {
+			Operation<T>* res = new Conv3D<T>(x, width, padding, stride, n_filters);
+			return activation(res, activation);
 		}
 
 		template<class T>
