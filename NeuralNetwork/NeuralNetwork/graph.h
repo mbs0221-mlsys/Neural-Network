@@ -538,21 +538,6 @@ namespace AutoGrad {
 
 		// activation function
 		template<class T>
-		Operation<T>* sigmoid(Node<T> *x) {
-			return new Sigmoid<T>(x);
-		}
-
-		template<class T>
-		Operation<T>* relu(Node<T> *x) {
-			return new ReLU<T>(x);
-		}
-
-		template<class T>
-		Operation<T>* leaky_relu(Node<T> *x, T max_value, T threshold, T negative_slop) {
-			return new LeakyReLU<T>(x, max_value, threshold, negative_slop);
-		}
-
-		template<class T>
 		Operation<T>* activation_func(Node<T> *x, string &func,...) {
 			//va_list args;
 			//va_start(args, func);
@@ -560,11 +545,11 @@ namespace AutoGrad {
 			//	T max_value = va_arg(args, T);
 			//	T threshold = va_arg(args, T);
 			//	T negative_slop = va_arg(args, T);
-			//	return leaky_relu(x, max_value, threshold, negative_slop);
+			//	return new LeakyReLU<T>(x, max_value, threshold, negative_slop);
 			//}
 			if (func == "relu")
-				return relu(x);
-			return sigmoid(x);
+				return new ReLU<T>(x);
+			return new Sigmoid<T>(x);
 		}
 
 		// convolution
