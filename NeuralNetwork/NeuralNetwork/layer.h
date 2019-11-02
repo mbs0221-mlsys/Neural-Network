@@ -298,14 +298,6 @@ namespace layers {
 			grad_b = delta.reduce_sum(0);
 			return Layer<T>::backward(delta.matmul(weight.Transpose()));
 		}
-		virtual void get_variables(Map &variable) {
-			variable["fc:weight"] = &weight;
-			variable["fc:bias"] = &bias;
-		}
-		virtual void get_gradients(Map &gradients) {
-			gradients["fc:weight"] = &grad_w;
-			gradients["fc:bias"] = &grad_b;
-		}
 	};
 
 	template<class T>

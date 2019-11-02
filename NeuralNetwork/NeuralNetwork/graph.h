@@ -389,6 +389,11 @@ namespace AutoGrad {
 	};
 
 	template<class T>
+	class Loss :public Operation<T> {
+
+	};
+
+	template<class T>
 	class MSE : public Operation<T> {
 	public:
 		MSE(Node<T> *output, Node<T> *target)
@@ -479,16 +484,16 @@ namespace AutoGrad {
 			}
 		}
 		void run() {
-			// forward order
+			// forward
 			vector<Operation<T>*>::iterator iter;
-			for (iter = operations.begin(); iter != operations.end(); iter++) {
-				Operation<T>* node = (*iter);
-				vector<Tensor<T>> inputs = node->getInputs();
+			for (Operation<T>* operation : operations) {
+				vector<Tensor<T>> inputs = operation->getInputs();
 				Tensor<T> value = node->compute(inputs);
 				node->setValue(value);
 			}
 		}
 		void build_grad() {
+			// build gradients
 			for (Variable<T>* variable : variables) {
 				if (variable->is_require_grad()) {
 					build_grad(grad_table, variable);
@@ -666,8 +671,8 @@ namespace AutoGrad {
 		net = fully_connected(net, 10);
 		net = softmax(net);
 
-		Operation<T> *loss = cross_entopy(net, y);
-		Session<T> session(loss);
+		//Operation<T> *loss = cross_entopy(net, y);
+		Session<T> session(net);
 
 		map<Placeholder<T>*, Tensor<T>> feed_dict;
 		feed_dict[x] = Tensor<T>(1, 1000, 28, 28, 3);
