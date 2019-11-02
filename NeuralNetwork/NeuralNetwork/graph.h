@@ -24,6 +24,7 @@ namespace AutoGrad {
 		void setShape(Shape &shape) { value = Tensor<T>::zeros(shape); }
 		Tensor<T> getValue() { return value; }
 		void setValue(Tensor<T> &value) { this->value = value; }
+		void add_consumer(Node<T> *consumer) { consumers.push_back(consumer); }
 		vector<Node*> get_consumers() { return consumers; }
 		virtual NodeType getNodeType() = 0;
 	};
@@ -57,20 +58,18 @@ namespace AutoGrad {
 	template<class T>
 	class Operation : public Node<T> {
 	protected:
+		vector<Node<T>*> input_nodes; // only operation has inputs
 		void add_weight(string name, Shape &shape, bool trainable = true) {
-			input_nodes.push_back(new Variable<T>(name, shape, trainable));
+			Variable<T> *variable = new Variable<T>(name, shape, trainable);
+			input_nodes.push_back(variable);
+			variable->add_consumer(this);
 		}
 	public:
-		vector<Node<T>*> input_nodes; // only operation has inputs
 		Operation(initializer_list<Node<T>*> inputs) {
-			// add input nodes
-			for (auto nodes : inputs) {
-				input_nodes.push_back(nodes);
-			}
-			// consumer
-			vector<Node<T>*>::iterator iter;
-			for (iter = input_nodes.begin(); iter != input_nodes.end(); iter++) {
-				(*iter)->consumers.push_back(this);
+			// build bi-directional linkage
+			for (Node<T>* input : inputs) {
+				input_nodes.push_back(input);
+				input->add_consumer(this);
 			}
 		}
 		Tensor<T> getInput(int i) {
@@ -84,6 +83,7 @@ namespace AutoGrad {
 			};
 			return inputs;
 		}
+		vector<Node<T>*> getInputNodes() { return input_nodes; }
 		virtual NodeType getNodeType() { return OPERATION; }
 		virtual void build(Shape &input_shape) { ; }// initialize weights
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) = 0; // compute output
@@ -389,11 +389,6 @@ namespace AutoGrad {
 	};
 
 	template<class T>
-	class Loss :public Operation<T> {
-
-	};
-
-	template<class T>
 	class MSE : public Operation<T> {
 	public:
 		MSE(Node<T> *output, Node<T> *target)
@@ -470,30 +465,23 @@ namespace AutoGrad {
 			operations.clear();
 		}
 		void initialize_all_variables() {
-			vector<Variable<T>*>::iterator iter;
-			for (iter = variables.begin(); iter != variables.end(); iter++) {
-				Variable<T>* node = (Variable<T>*)(*iter);
-				node->initialize();
+			for (Variable<T>* variable : variables) {
+				variable->initialize();
 			}
 		}
 		void feed_dict(map<Placeholder<T>*, Tensor<T>> &feed_dict) {
-			vector<Placeholder<T>*>::iterator iter;
-			for (iter = placeholders.begin(); iter != placeholders.end(); iter++) {
-				Placeholder<T>* node = (Placeholder<T>*)(*iter);
-				node->setValue(feed_dict[node]);
+			for (Placeholder<T>* placeholder : placeholders) {
+				placeholder->setValue(feed_dict[placeholder]);
 			}
 		}
 		void run() {
-			// forward
-			vector<Operation<T>*>::iterator iter;
 			for (Operation<T>* operation : operations) {
 				vector<Tensor<T>> inputs = operation->getInputs();
-				Tensor<T> value = node->compute(inputs);
-				node->setValue(value);
+				Tensor<T> value = operation->compute(inputs);
+				operation->setValue(value);
 			}
 		}
 		void build_grad() {
-			// build gradients
 			for (Variable<T>* variable : variables) {
 				if (variable->is_require_grad()) {
 					build_grad(grad_table, variable);
@@ -508,10 +496,9 @@ namespace AutoGrad {
 				variables.push_back((Variable<T>*)root);
 			}
 			if (root->getNodeType() == OPERATION) {
-				vector<Node<T>*>::iterator iter;
-				vector<Node<T>*> input_nodes = ((Operation<T>*)root)->input_nodes;
-				for (iter = input_nodes.begin(); iter != input_nodes.end(); iter++) {
-					collect(*iter);
+				vector<Node<T>*> inputs = ((Operation<T>*)root)->getInputNodes();
+				for (Node<T>* input : inputs) {
+					collect(input);
 				}
 				operations.push_back((Operation<T>*)root);
 			}
