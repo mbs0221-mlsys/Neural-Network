@@ -20,9 +20,9 @@ namespace AutoGrad {
 	public:
 		vector<Node*> consumers;// the consummer of this node
 		Node() {  }
-		void addInput() {}
-		Tensor<T> getValue() { return value; }
 		Shape getShape() { return value.getShape(); }
+		void setShape(Shape &shape) { value = Tensor<T>::zeros(shape); }
+		Tensor<T> getValue() { return value; }
 		void setValue(Tensor<T> &value) { this->value = value; }
 		vector<Node*> get_consumers() { return consumers; }
 		virtual NodeType getNodeType() = 0;
@@ -34,11 +34,9 @@ namespace AutoGrad {
 		string name;
 		Shape shape;
 		bool require_grad;
-		Tensor<T> grad;
 	public:
 		Variable(string name, Shape &shape, bool require_grad=true)
 			: name(name), shape(shape), require_grad(require_grad) {
-			grad = Tensor<T>::zeros(shape);
 		}
 		virtual NodeType getNodeType() { return VARIABLE; }
 		bool is_require_grad() { return require_grad; }
@@ -75,7 +73,6 @@ namespace AutoGrad {
 				(*iter)->consumers.push_back(this);
 			}
 		}
-		virtual void build(Shape &input_shape) { ; }
 		Tensor<T> getInput(int i) {
 			return input_nodes[i]->getValue();
 		}
@@ -88,8 +85,9 @@ namespace AutoGrad {
 			return inputs;
 		}
 		virtual NodeType getNodeType() { return OPERATION; }
-		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) = 0;
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) = 0;
+		virtual void build(Shape &input_shape) { ; }// initialize weights
+		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) = 0; // compute output
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) = 0; // back propagation
 	};
 
 
@@ -104,7 +102,7 @@ namespace AutoGrad {
 			Tensor<T> y = inputs[1];
 			return x + y;
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D;
 		}
 	};
@@ -118,7 +116,7 @@ namespace AutoGrad {
 			Tensor<T> y = inputs[1];
 			return x.matmul(y);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			vector<Tensor<T>> inputs = getInputs();
 			if (V == input_nodes[0])
 				return inputs[1].matmul(D);
@@ -154,7 +152,7 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			return inputs[0].padding(padding).conv2d(inputs[1], inputs[2], stride);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			Tensor<T> x = getInput(0);
 			Tensor<T> filter = getInput(1);
 			Tensor<T> bias = getInput(2);
@@ -177,7 +175,7 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			return inputs[0].padding(padding).conv2d(inputs[1], inputs[2], stride);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			Tensor<T> x = getInput(0);
 			Tensor<T> filter = getInput(1);
 			Tensor<T> bias = getInput(2);
@@ -211,7 +209,7 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			return inputs[0].max_pooling(width);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D.upsampling(V->getValue(), width);
 		}
 	};
@@ -223,7 +221,7 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			return inputs[0].min_pooling(width);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D.upsampling(V->getValue(), width);
 		}
 	};
@@ -235,7 +233,7 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			return inputs[0].avg_pooling(width);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D.avg_upsampling(V->getValue(), width);
 		}
 	};
@@ -278,7 +276,7 @@ namespace AutoGrad {
 			Tensor<T> input = inputs[0];
 			return input.reshape(output_shape);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D.reshape(V->getShape());
 		}
 	};
@@ -290,7 +288,7 @@ namespace AutoGrad {
 		virtual Tensor<T> compute(vector<Tensor<T>> &inputs) {
 			return inputs[0].flatten();
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D.reshape(V->getShape());
 		}
 	};
@@ -314,7 +312,7 @@ namespace AutoGrad {
 			Tensor<T> b = inputs[2];
 			return  x.matmul(w).add(b);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			// calculate the delta of the weight and bias
 			Tensor<T> x = getInput(0);
 			Tensor<T> w = getInput(1);
@@ -339,7 +337,7 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			return  x.sigmoid();
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			Tensor<T> y = this->getValue();
 			Tensor<T> e = Tensor<T>::ones(y.getShape());
 			return D * (y * (e - y));
@@ -354,7 +352,7 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			return x.relu();
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D * ops::grad_relu(V->getValue());
 		}
 	};
@@ -372,7 +370,7 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			return x.relu(max_value, threshold, negative_slop);
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return D * ops::grad_relu(V->getValue(), max_value, threshold, negative_slop);
 		}
 	};
@@ -385,7 +383,7 @@ namespace AutoGrad {
 			Tensor<T> x = inputs[0];
 			return x.softmax();
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			return Tensor<T>::zeros(D.getShape());
 		}
 	};
@@ -401,7 +399,7 @@ namespace AutoGrad {
 			Tensor<T> error = (y_ - y).pow(2);
 			return error.reduce_mean();
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			Tensor<T> y_ = V->getValue();
 			Tensor<T> y = getInput(1);
 			return (y_ - y);
@@ -419,7 +417,7 @@ namespace AutoGrad {
 			Tensor<T> error = ((T)0.0f - (y*y_.log() + ((T)1.0f - y)*((T)1.0f - y_).log()));
 			return error.reduce_mean();
 		}
-		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> D) {
+		virtual Tensor<T> bprop(Node<T>* V, Tensor<T> &D) {
 			Tensor<T> y_ = V->getValue();
 			Tensor<T> y = getInput(1);
 			return (y_ - y);
