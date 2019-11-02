@@ -67,10 +67,10 @@ namespace shape {
 			int size() {
 				return (dims[0] * dims[1] * dims[2] * dims[3] * dims[4]);
 			}
-			inline int sub2ind(int i, int j, int k, int l, int m) {
+			inline int sub2ind(int i, int j, int k, int l, int m) const {
 				return ((((i*dims[1] + j)*dims[2] + k)*dims[3] + l)*dims[4] + m);
 			}
-			inline int sub2ind(int subs[]) {
+			inline int sub2ind(int subs[]) const  {
 				return sub2ind(subs[0], subs[1], subs[2], subs[3], subs[4]);
 			}
 			inline int* ind2sub(int idx) {

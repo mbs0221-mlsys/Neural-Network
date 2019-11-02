@@ -6,6 +6,10 @@ using namespace tensor;
 
 template class Tensor<double>;
 
+typedef Tensor<double> DoubleTensor;
+typedef Tensor<float> FloatTensor;
+typedef Tensor<int> IntTensor;
+
 template void tensor::test_basic<double>();
 template void tensor::test_conv<double>();
 template void tensor::test_pooling<double>();
@@ -68,6 +72,9 @@ void tensor::test_conv() {
 
 	cout << "filter.rotate180().permute(before);" << endl;
 	filter.rotate180().permute(before).print();
+	
+	cout << "conv2d(no bias);" << endl;
+	tensor.padding(1).conv2d(filter, 2).permute(before).print();
 
 	cout << "conv2d;" << endl;
 	tensor.padding(1).conv2d(filter, bias, 2).permute(before).print();

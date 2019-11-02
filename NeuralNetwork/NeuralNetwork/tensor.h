@@ -188,7 +188,7 @@ namespace tensor {
 		Tensor(Shape &shape) : shape(shape) {
 			__allocate_();
 		}
-		Tensor(Tensor<T> &tensor) {
+		Tensor(const Tensor<T> &tensor) {
 			shape = tensor.getShape();
 			__allocate_();
 			tensor.foreach([&](int i, int j, int k, int l, int m) {
@@ -202,12 +202,12 @@ namespace tensor {
 
 		
 	public: // get & set methods
-		Shape getShape() { return shape; }
+		Shape getShape() const { return shape; }
 		int length() { return shape.size(); }
 		int size() { return (sizeof(T)*shape.size()); }
 
 		// non-parallel foreach
-		void foreach(function<void(int,int,int,int,int)> func) {
+		void foreach(function<void(int,int,int,int,int)> func) const {
 			for (int i = 0; i < shape[0]; i++) {// sample
 				for (int j = 0; j < shape[1]; j++) {// frame
 					for (int k = 0; k < shape[2]; k++) {// column(width)
@@ -220,7 +220,7 @@ namespace tensor {
 				}
 			}
 		}
-		void foreach_assign(function<T(int, int, int, int, int)> func) {
+		void foreach_assign(function<T(int, int, int, int, int)> func) const {
 			foreach([&](int i, int j, int k, int l, int m) {
 				int idx = shape.sub2ind(i, j, k, l, m);
 				data[idx] = func(i, j, k, l, m);
@@ -432,7 +432,7 @@ namespace tensor {
 			int idx = shape.sub2ind(i, j, k, l, m);
 			data[idx] = value;
 		}
-		inline T at(int i, int j, int k, int l, int m) {
+		inline T at(int i, int j, int k, int l, int m) const {
 			int idx = shape.sub2ind(i, j, k, l, m);
 			return data[idx];
 		}
@@ -441,7 +441,7 @@ namespace tensor {
 			return data[idx];
 		}
 
-		inline T get(int idx) { return data[idx]; }
+		inline T get(int idx) const { return data[idx]; }
 		
 	public:
 		// rotate operation
@@ -740,13 +740,13 @@ namespace tensor {
 		}
 
 		// slice
-		Tensor<T> slice(int start, int end, int axis) {
+		Tensor<T> slice(int start, int end, int dim) {
 			// frame, width(column), height(row), channel. 
 			Shape shape_out = shape;
-			shape_out.set(end - start, axis);
+			shape_out.set(end - start, dim);
 			Tensor<T> out(shape_out);
 			// slice
-			switch (axis) {
+			switch (dim) {
 			case 0:// sample
 				out.foreach_assign([&](int i, int j, int k, int l, int m) {
 					return this->at(i + start, j, k, l, m);
@@ -779,9 +779,9 @@ namespace tensor {
 		}
 		
 		// matrix operation
-		Tensor<T>& operator=(Tensor<T> &tensor) {
-			Shape tensor_shape = tensor.getShape();
+		Tensor<T>& operator=(Tensor<T> &tensor) {			
 			if (length() != tensor.length()) {
+				shape = tensor.getShape();
 				__free_();
 				__allocate_();
 			}
