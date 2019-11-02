@@ -43,8 +43,8 @@ namespace ops {
 	template<class T>
 	Tensor<T> grad_relu(Tensor<T> &x) {
 		Tensor<T> grad(x.getShape());
-		grad.foreach_assign([&](int i, int j, int k, int l) {
-			return __relu_grad_(x.at(i, j, k, l));
+		grad.foreach_assign([&](int i, int j, int k, int l, int m) {
+			return __relu_grad_(x.at(i, j, k, l, m));
 		});
 		return grad;
 	}
