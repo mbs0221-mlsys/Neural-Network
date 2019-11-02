@@ -329,6 +329,8 @@ namespace AutoGrad {
 		}
 	};
 
+
+	//----------------------------------------ACTIVATION OPERATION---------------------
 	template<class T>
 	class Sigmoid : public Operation<T> {
 	public:
