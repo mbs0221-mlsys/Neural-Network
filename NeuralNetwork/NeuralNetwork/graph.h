@@ -556,6 +556,7 @@ namespace AutoGrad {
 			}
 		}
 		void feed_dict(map<Placeholder<T>*, Tensor<T>*> &feed_dict) {
+			// initialize placaeholders
 			for (Placeholder<T>* placeholder : placeholders) {
 				Tensor<T> tensor = *feed_dict[placeholder];
 				placeholder->setValue(tensor);
@@ -568,7 +569,7 @@ namespace AutoGrad {
 			}
 		}
 		void run() {
-			// forward evaluate
+			// forward evaluation
 			for (Operation<T>* operation : operations) {
 				vector<Tensor<T>> inputs = operation->getInputs();
 				Tensor<T> value = operation->forward(inputs);
@@ -576,14 +577,12 @@ namespace AutoGrad {
 			}
 		}
 		void build_grad() {
+			// initialize the gradient of loss
 			int N = operations.size();
 			Operation<T> *loss = operations[N - 1];
-			Operation<T> *net = operations[N - 2];
-			// initialize the gradient of loss
-			Shape shape = net->getShape();
-			Tensor<T> eye = Tensor<T>::eye(shape[4]);
-			grad_table[net] = loss->bprop(net, eye);
-			// update gradients
+			Shape shape = loss->getShape();
+			grad_table[loss] = Tensor<T>::eye(shape[4]);
+			// update the gradients of other variables
 			for (Variable<T>* variable : variables) {
 				if (variable->isRequireGrad()) {
 					build_grad(grad_table, variable);
