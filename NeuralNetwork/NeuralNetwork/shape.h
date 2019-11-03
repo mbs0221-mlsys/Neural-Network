@@ -45,7 +45,7 @@ namespace shape {
 				dims[3] = l;
 				dims[4] = m;
 			}
-			Shape& flatten(int axis) {
+			Shape& flatten(int axis=2) {
 				switch (axis) {
 				case 0: // merge all dims to one dimension
 					set(1, 1, 1, 1, dims[0] * dims[1] * dims[2] * dims[3] * dims[4]);
