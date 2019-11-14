@@ -12,4 +12,6 @@ C++神经网络框架
   * permute/reshape/flatten
   * reduce_sum/reduce_mean
   * sigmoid/relu/leaky_relu/softmax
-* 预计进一步实现计算图框架，实现AutoGrad
+* 初步实现了计算图框架，支持多分支网络模型
+* 预计进一步实现：
+  * 基于梯度的一些优化算法
