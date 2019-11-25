@@ -7,7 +7,7 @@ C++神经网络框架
   * element-wise operation
   * broadcast operation
   * conv2d/conv3d operation
-  * max/mIn/average pooling
+  * max/min/average pooling
   * max/min/average upsampling
   * permute/reshape/flatten
   * reduce_sum/reduce_mean
